@@ -102,7 +102,59 @@ export type Project = {
   planned_end_date?: string;
   actual_end_date?: string;
   memberships: ProjectMembership[];
+  milestones?: ProjectMilestone[];
+  risks?: ProjectRisk[];
+  recruitment_openings?: RecruitmentOpening[];
   tasks?: Task[];
+};
+
+export type ProjectMilestone = {
+  id: number;
+  title: string;
+  description: string;
+  due_date?: string | null;
+  status: "planned" | "in_progress" | "completed" | "blocked";
+  progress_percent: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProjectRisk = {
+  id: number;
+  title: string;
+  description: string;
+  severity: "low" | "medium" | "high" | "critical";
+  impact: string;
+  mitigation_plan: string;
+  owner?: number | null;
+  owner_email?: string;
+  status: "open" | "monitored" | "mitigated" | "closed";
+  created_at: string;
+  updated_at: string;
+};
+
+export type RecruitmentApplication = {
+  id: number;
+  applicant?: number | null;
+  applicant_email?: string;
+  motivation: string;
+  availability_note: string;
+  status: "pending" | "accepted" | "rejected";
+  created_at: string;
+};
+
+export type RecruitmentOpening = {
+  id: number;
+  title: string;
+  description: string;
+  required_competencies: string[];
+  slots: number;
+  weekly_hours: number;
+  deadline?: string | null;
+  is_open: boolean;
+  applications: RecruitmentApplication[];
+  created_at: string;
+  updated_at: string;
 };
 
 export type MeetingParticipant = {

@@ -1,5 +1,4 @@
 import { ApiError, api } from "@/api/client";
-import { announcements, currentUser, knowledgeArticles, meetings, notifications, polls, projects, reports, resources } from "@/lib/mock-data";
 import type {
   Achievement,
   Announcement,
@@ -13,8 +12,12 @@ import type {
   MeetingParticipant,
   Notification,
   Project,
+  ProjectMilestone,
+  ProjectRisk,
   ProjectHealth,
   ProjectMembership,
+  RecruitmentApplication,
+  RecruitmentOpening,
   Reservation,
   ReportSnapshot,
   Resource,
@@ -79,6 +82,39 @@ export type AddProjectMemberPayload = {
   user: number;
   project_role: ProjectMembership["project_role"];
   is_active?: boolean;
+};
+
+export type CreateProjectMilestonePayload = {
+  title: string;
+  description?: string;
+  due_date?: string | null;
+  status?: string;
+  progress_percent?: number;
+};
+
+export type CreateProjectRiskPayload = {
+  title: string;
+  description: string;
+  severity?: string;
+  impact?: string;
+  mitigation_plan?: string;
+  owner?: number | null;
+  status?: string;
+};
+
+export type CreateRecruitmentOpeningPayload = {
+  title: string;
+  description: string;
+  required_competencies?: string[];
+  slots?: number;
+  weekly_hours?: number;
+  deadline?: string | null;
+  is_open?: boolean;
+};
+
+export type ApplyRecruitmentPayload = {
+  motivation?: string;
+  availability_note?: string;
 };
 
 export type CreateTaskPayload = {
@@ -163,21 +199,8 @@ export type CreateReservationPayload = {
   status?: string;
 };
 
-const demoMode = import.meta.env.VITE_ENABLE_DEMO_DATA === "true";
-
 function unwrapList<T>(payload: T[] | Paginated<T>): T[] {
   return Array.isArray(payload) ? payload : payload.results;
-}
-
-async function withDemoFallback<T>(queryFn: () => Promise<T>, fallback: T): Promise<T> {
-  try {
-    return await queryFn();
-  } catch (error) {
-    if (demoMode) {
-      return fallback;
-    }
-    throw error;
-  }
 }
 
 export async function fetchMe(): Promise<User | null> {
@@ -185,68 +208,59 @@ export async function fetchMe(): Promise<User | null> {
     return await api<User>("/auth/me/");
   } catch (error) {
     if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-      return demoMode ? currentUser : null;
+      return null;
     }
     throw error;
   }
 }
 
 export async function fetchProjects(): Promise<Project[]> {
-  return withDemoFallback(async () => unwrapList(await api<Project[] | Paginated<Project>>("/projects/")), projects);
+  return unwrapList(await api<Project[] | Paginated<Project>>("/projects/"));
 }
 
 export async function fetchUsers(): Promise<User[]> {
-  return withDemoFallback(async () => unwrapList(await api<User[] | Paginated<User>>("/users/")), [currentUser]);
+  return unwrapList(await api<User[] | Paginated<User>>("/users/"));
 }
 
 export async function fetchMeetings(): Promise<Meeting[]> {
-  return withDemoFallback(async () => unwrapList(await api<Meeting[] | Paginated<Meeting>>("/meetings/")), meetings);
+  return unwrapList(await api<Meeting[] | Paginated<Meeting>>("/meetings/"));
 }
 
 export async function fetchTasks(projectId?: number): Promise<Task[]> {
   const path = projectId ? `/tasks/?project=${projectId}` : "/tasks/";
-  return withDemoFallback(async () => unwrapList(await api<Task[] | Paginated<Task>>(path)), []);
+  return unwrapList(await api<Task[] | Paginated<Task>>(path));
 }
 
 export async function fetchPolls(): Promise<VotePoll[]> {
-  return withDemoFallback(async () => unwrapList(await api<VotePoll[] | Paginated<VotePoll>>("/polls/")), polls);
+  return unwrapList(await api<VotePoll[] | Paginated<VotePoll>>("/polls/"));
 }
 
 export async function fetchKnowledge(): Promise<KnowledgeArticle[]> {
-  return withDemoFallback(
-    async () => unwrapList(await api<KnowledgeArticle[] | Paginated<KnowledgeArticle>>("/knowledge/")),
-    knowledgeArticles,
-  );
+  return unwrapList(await api<KnowledgeArticle[] | Paginated<KnowledgeArticle>>("/knowledge/"));
 }
 
 export async function fetchAnnouncements(): Promise<Announcement[]> {
-  return withDemoFallback(
-    async () => unwrapList(await api<Announcement[] | Paginated<Announcement>>("/announcements/")),
-    announcements,
-  );
+  return unwrapList(await api<Announcement[] | Paginated<Announcement>>("/announcements/"));
 }
 
 export async function fetchReports(): Promise<ReportSnapshot[]> {
-  return withDemoFallback(async () => unwrapList(await api<ReportSnapshot[] | Paginated<ReportSnapshot>>("/reports/")), reports);
+  return unwrapList(await api<ReportSnapshot[] | Paginated<ReportSnapshot>>("/reports/"));
 }
 
 export async function fetchResources(): Promise<Resource[]> {
-  return withDemoFallback(async () => unwrapList(await api<Resource[] | Paginated<Resource>>("/resources/")), resources);
+  return unwrapList(await api<Resource[] | Paginated<Resource>>("/resources/"));
 }
 
 export async function fetchReservations(): Promise<Reservation[]> {
-  return withDemoFallback(async () => unwrapList(await api<Reservation[] | Paginated<Reservation>>("/reservations/")), []);
+  return unwrapList(await api<Reservation[] | Paginated<Reservation>>("/reservations/"));
 }
 
 export async function fetchNotifications(): Promise<Notification[]> {
-  return withDemoFallback(
-    async () => unwrapList(await api<Notification[] | Paginated<Notification>>("/notifications/")),
-    notifications,
-  );
+  return unwrapList(await api<Notification[] | Paginated<Notification>>("/notifications/"));
 }
 
 export async function fetchUserPortfolio(userId: number): Promise<Achievement[]> {
-  return withDemoFallback(async () => api<Achievement[]>(`/users/${userId}/portfolio/`), []);
+  return api<Achievement[]>(`/users/${userId}/portfolio/`);
 }
 
 export async function fetchProjectBoard(projectId: number): Promise<KanbanBoard> {
@@ -259,6 +273,18 @@ export async function fetchProjectOverview(projectId: number) {
 
 export async function fetchProjectActivity(projectId: number) {
   return api<Array<{ id: number; action_type: string; description: string; created_at: string }>>(`/projects/${projectId}/activity/`);
+}
+
+export async function fetchProjectMilestones(projectId: number): Promise<ProjectMilestone[]> {
+  return api<ProjectMilestone[]>(`/projects/${projectId}/milestones/`);
+}
+
+export async function fetchProjectRisks(projectId: number): Promise<ProjectRisk[]> {
+  return api<ProjectRisk[]>(`/projects/${projectId}/risks/`);
+}
+
+export async function fetchProjectRecruitment(projectId: number): Promise<RecruitmentOpening[]> {
+  return api<RecruitmentOpening[]>(`/projects/${projectId}/recruitment/`);
 }
 
 export async function fetchProjectMeetings(projectId: number): Promise<Meeting[]> {
@@ -288,6 +314,71 @@ export async function addProjectMember(projectId: number, payload: AddProjectMem
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export async function createProjectMilestone(projectId: number, payload: CreateProjectMilestonePayload) {
+  return api<ProjectMilestone>(`/projects/${projectId}/milestones/`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateProjectMilestone(projectId: number, milestoneId: number, payload: Partial<CreateProjectMilestonePayload>) {
+  return api<ProjectMilestone>(`/projects/${projectId}/milestones/${milestoneId}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteProjectMilestone(projectId: number, milestoneId: number) {
+  return api<void>(`/projects/${projectId}/milestones/${milestoneId}/`, { method: "DELETE" });
+}
+
+export async function createProjectRisk(projectId: number, payload: CreateProjectRiskPayload) {
+  return api<ProjectRisk>(`/projects/${projectId}/risks/`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateProjectRisk(projectId: number, riskId: number, payload: Partial<CreateProjectRiskPayload>) {
+  return api<ProjectRisk>(`/projects/${projectId}/risks/${riskId}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteProjectRisk(projectId: number, riskId: number) {
+  return api<void>(`/projects/${projectId}/risks/${riskId}/`, { method: "DELETE" });
+}
+
+export async function createRecruitmentOpening(projectId: number, payload: CreateRecruitmentOpeningPayload) {
+  return api<RecruitmentOpening>(`/projects/${projectId}/recruitment/`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateRecruitmentOpening(projectId: number, openingId: number, payload: Partial<CreateRecruitmentOpeningPayload>) {
+  return api<RecruitmentOpening>(`/projects/${projectId}/recruitment/${openingId}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteRecruitmentOpening(projectId: number, openingId: number) {
+  return api<void>(`/projects/${projectId}/recruitment/${openingId}/`, { method: "DELETE" });
+}
+
+export async function applyToRecruitment(projectId: number, openingId: number, payload: ApplyRecruitmentPayload) {
+  return api<RecruitmentApplication>(`/projects/${projectId}/recruitment/${openingId}/apply/`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function archiveProject(projectId: number) {
+  return api<Project>(`/projects/${projectId}/archive/`, { method: "POST" });
 }
 
 export async function createTask(payload: CreateTaskPayload) {

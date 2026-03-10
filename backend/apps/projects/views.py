@@ -1,4 +1,5 @@
 from django.db.models import Count, Q
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -156,7 +157,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
         denied = self._ensure_manage_access(request, project)
         if denied:
             return denied
-        membership = ProjectMembership.objects.get(pk=membership_id, project_id=pk)
+        membership = get_object_or_404(ProjectMembership, pk=membership_id, project_id=pk)
         if request.method == "PATCH":
             serializer = ProjectMembershipSerializer(membership, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
@@ -197,6 +198,21 @@ class ProjectViewSet(viewsets.ModelViewSet):
         serializer.save(project=project)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=["patch", "delete"], url_path=r"milestones/(?P<milestone_id>\d+)")
+    def milestone_detail(self, request, pk=None, milestone_id=None):
+        project = self.get_object()
+        denied = self._ensure_manage_access(request, project)
+        if denied:
+            return denied
+        milestone = get_object_or_404(ProjectMilestone, pk=milestone_id, project_id=pk)
+        if request.method == "PATCH":
+            serializer = ProjectMilestoneSerializer(milestone, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
+        milestone.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     @action(detail=True, methods=["get", "post"], url_path="risks")
     def risks(self, request, pk=None):
         project = self.get_object()
@@ -212,6 +228,21 @@ class ProjectViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save(project=project)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["patch", "delete"], url_path=r"risks/(?P<risk_id>\d+)")
+    def risk_detail(self, request, pk=None, risk_id=None):
+        project = self.get_object()
+        denied = self._ensure_manage_access(request, project)
+        if denied:
+            return denied
+        risk = get_object_or_404(ProjectRisk, pk=risk_id, project_id=pk)
+        if request.method == "PATCH":
+            serializer = ProjectRiskSerializer(risk, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
+        risk.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["get", "post"], url_path="tasks")
     def tasks(self, request, pk=None):
@@ -248,9 +279,24 @@ class ProjectViewSet(viewsets.ModelViewSet):
         serializer.save(project=project)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=["patch", "delete"], url_path=r"recruitment/(?P<opening_id>\d+)")
+    def recruitment_detail(self, request, pk=None, opening_id=None):
+        project = self.get_object()
+        denied = self._ensure_manage_access(request, project)
+        if denied:
+            return denied
+        opening = get_object_or_404(RecruitmentOpening, pk=opening_id, project_id=pk)
+        if request.method == "PATCH":
+            serializer = RecruitmentOpeningSerializer(opening, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
+        opening.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     @action(detail=True, methods=["post"], url_path=r"recruitment/(?P<opening_id>\d+)/apply")
     def apply_recruitment(self, request, pk=None, opening_id=None):
-        opening = RecruitmentOpening.objects.get(pk=opening_id, project_id=pk)
+        opening = get_object_or_404(RecruitmentOpening, pk=opening_id, project_id=pk)
         serializer = RecruitmentApplicationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(opening=opening, applicant=request.user)
