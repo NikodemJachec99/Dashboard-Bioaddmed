@@ -37,8 +37,10 @@ import { useAuth } from "@/app/providers/auth-provider";
 import { KanbanBoard } from "@/components/common/kanban-board";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
+import { StatCard } from "@/components/common/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Calendar, FolderKanban, Trophy, Users } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import type { KanbanColumn, Task } from "@/types/domain";
 
@@ -78,6 +80,21 @@ function moveOptimistic(columns: KanbanColumn[], taskId: number, targetColumnId:
     if (column.id === source.id && source.id !== target.id) return { ...column, tasks: normalize(sourceTasks, source.id) };
     return column;
   });
+}
+
+function statusTone(status: string) {
+  if (status === "at_risk") return "warning";
+  if (status === "blocked") return "danger";
+  if (status === "completed") return "success";
+  return "default";
+}
+
+function statusNarrative(status: string, progressPercent: number) {
+  if (status === "blocked") return "Projekt wymaga decyzji lub odblokowania krytycznej zaleznosci.";
+  if (status === "at_risk") return "Tempo realizacji spada. Priorytetem jest redukcja ryzyk i pilnowanie ownerow.";
+  if (status === "completed") return "Projekt jest zakonczony i gotowy do archiwizacji lub prezentacji wynikow.";
+  if (progressPercent >= 70) return "Projekt jest w stabilnej fazie delivery i zmierza do domkniecia.";
+  return "Projekt jest w budowie i potrzebuje mocnego rytmu operacyjnego.";
 }
 
 export function ProjectDetailPage() {
@@ -150,6 +167,10 @@ export function ProjectDetailPage() {
   const [applyByOpening, setApplyByOpening] = useState<Record<number, { motivation: string; availability_note: string }>>({});
   const [linkForm, setLinkForm] = useState({ label: "", url: "", type: "github" });
   const [editingLinkId, setEditingLinkId] = useState<number | null>(null);
+  const activeMemberCount = project?.memberships.filter((membership) => membership.is_active !== false).length ?? 0;
+  const blockerCount = tasks.filter((task) => task.is_blocker || task.status === "blocked").length;
+  const completedTaskCount = tasks.filter((task) => task.status === "done").length;
+  const openRiskCount = risks.filter((risk) => risk.status !== "closed").length;
 
   const refresh = async () => {
     await Promise.all([
@@ -285,9 +306,85 @@ export function ProjectDetailPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Projekt" title={project.name} description={project.full_description ?? project.short_description} />
+      <PageHeader
+        eyebrow="Project Command"
+        title={project.name}
+        description={project.full_description ?? project.short_description}
+      />
       {feedback ? <div className="rounded-2xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700">{feedback}</div> : null}
       {error ? <div className="rounded-2xl bg-rose-500/10 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
+
+      <div className="grid gap-6 xl:grid-cols-[1.15fr_.85fr]">
+        <SectionCard
+          title="Executive summary"
+          description="Szybki obraz zdrowia projektu: gdzie jest impet, gdzie jest ryzyko i jak wyglada obecna gotowosc do dowiezienia."
+        >
+          <div className="grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
+            <div className="rounded-[28px] border border-white/25 bg-gradient-to-br from-white/80 to-cyan-50/60 p-6 dark:border-white/10 dark:from-slate-950/80 dark:to-slate-900/70">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone={statusTone(project.status)}>{project.status}</Badge>
+                <Badge>{project.stage}</Badge>
+                <Badge>{project.category}</Badge>
+              </div>
+              <h2 className="mt-4 text-3xl font-extrabold tracking-[-0.04em]">{project.progress_percent}% delivery progress</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-muted">{statusNarrative(project.status, project.progress_percent)}</p>
+              <div className="mt-5 h-3 rounded-full bg-slate-200/70 dark:bg-slate-700/60">
+                <div className="h-3 rounded-full bg-accent transition-all" style={{ width: `${project.progress_percent}%` }} />
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-[24px] bg-white/70 p-4 dark:bg-white/5">
+                <p className="text-xs uppercase tracking-[0.18em] text-muted">Open risks</p>
+                <p className="mt-2 text-3xl font-extrabold tracking-[-0.03em]">{openRiskCount}</p>
+                <p className="mt-1 text-xs text-muted">ryzyk nadal wymaga uwagi</p>
+              </div>
+              <div className="rounded-[24px] bg-white/70 p-4 dark:bg-white/5">
+                <p className="text-xs uppercase tracking-[0.18em] text-muted">Blockers</p>
+                <p className="mt-2 text-3xl font-extrabold tracking-[-0.03em]">{blockerCount}</p>
+                <p className="mt-1 text-xs text-muted">taskow moze blokowac delivery</p>
+              </div>
+              <div className="rounded-[24px] bg-white/70 p-4 dark:bg-white/5">
+                <p className="text-xs uppercase tracking-[0.18em] text-muted">Done</p>
+                <p className="mt-2 text-3xl font-extrabold tracking-[-0.03em]">{completedTaskCount}</p>
+                <p className="mt-1 text-xs text-muted">taskow jest juz domknietych</p>
+              </div>
+              <div className="rounded-[24px] bg-white/70 p-4 dark:bg-white/5">
+                <p className="text-xs uppercase tracking-[0.18em] text-muted">Team</p>
+                <p className="mt-2 text-3xl font-extrabold tracking-[-0.03em]">{activeMemberCount}</p>
+                <p className="mt-1 text-xs text-muted">aktywnych osob w projekcie</p>
+              </div>
+            </div>
+          </div>
+        </SectionCard>
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
+          <StatCard
+            label="Taski"
+            value={overview?.stats?.total_tasks ?? tasks.length}
+            detail="Laczna liczba zadan operacyjnych powiazanych z projektem."
+            icon={<FolderKanban size={18} />}
+          />
+          <StatCard
+            label="Zespol"
+            value={overview?.stats?.members ?? activeMemberCount}
+            detail="Aktywne przypisania projektowe oraz aktualny sklad delivery."
+            icon={<Users size={18} />}
+          />
+          <StatCard
+            label="Spotkania"
+            value={overview?.stats?.meetings ?? 0}
+            detail="Liczba spotkan projektowych wspierajacych rytm decyzyjny i delivery."
+            icon={<Calendar size={18} />}
+          />
+          <StatCard
+            label="Milestones"
+            value={milestones.length}
+            detail="Kamienie milowe, ktore wyznaczaja narrative i tempo projektu."
+            icon={<Trophy size={18} />}
+            tone={milestones.length > 0 ? "success" : "default"}
+          />
+        </div>
+      </div>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_.42fr]">
         <SectionCard title="Kanban" description="Realny DnD z walidacja uprawnien i rollbackiem.">

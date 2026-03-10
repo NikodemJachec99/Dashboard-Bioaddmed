@@ -8,16 +8,16 @@ type SectionCardProps = PropsWithChildren<{
 
 export function SectionCard({ title, description, action, children }: SectionCardProps) {
   return (
-    <section className="glass-panel hairline p-6">
-      <div className="mb-5 flex items-start justify-between gap-4">
+    <section className="glass-panel hairline relative overflow-hidden p-6">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[linear-gradient(180deg,rgba(14,165,233,0.08),transparent)] dark:bg-[linear-gradient(180deg,rgba(56,189,248,0.08),transparent)]" />
+      <div className="relative mb-5 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold">{title}</h2>
-          {description ? <p className="mt-1 text-sm text-muted">{description}</p> : null}
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">{title}</h2>
+          {description ? <p className="mt-1 max-w-2xl text-sm leading-6 text-muted">{description}</p> : null}
         </div>
         {action}
       </div>
-      {children}
+      <div className="relative">{children}</div>
     </section>
   );
 }
-
