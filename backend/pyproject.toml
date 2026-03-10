@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bioaddmed-backend"
+version = "0.1.0"
+description = "BioAddMed Hub backend"
+requires-python = ">=3.12"
+dependencies = [
+  "Django>=5.1,<5.3",
+  "djangorestframework>=3.15,<3.17",
+  "djangorestframework-simplejwt>=5.3,<5.5",
+  "django-filter>=24.3,<26.0",
+  "drf-spectacular>=0.28,<0.29",
+  "django-cors-headers>=4.6,<5.0",
+  "psycopg[binary]>=3.2,<3.3",
+  "gunicorn>=23.0,<24.0",
+  "whitenoise>=6.8,<7.0",
+  "celery>=5.4,<5.5",
+  "redis>=5.2,<6.0",
+  "python-dotenv>=1.0,<2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9.0",
+  "pytest-django>=4.10,<5.0",
+  "factory-boy>=3.3,<4.0",
+  "ruff>=0.8,<1.0",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+python_files = ["tests.py", "test_*.py", "*_tests.py"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "UP"]
+
+[tool.setuptools.packages.find]
+include = ["apps*", "config*"]
