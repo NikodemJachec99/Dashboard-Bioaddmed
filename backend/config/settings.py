@@ -14,7 +14,7 @@ AUTH_COOKIE_DOMAIN = os.getenv("AUTH_COOKIE_DOMAIN") or None
 AUTH_COOKIE_SECURE = os.getenv("AUTH_COOKIE_SECURE", "true" if not DEBUG else "false").lower() == "true"
 AUTH_COOKIE_SAMESITE = os.getenv("AUTH_COOKIE_SAMESITE", "Lax")
 AUTH_COOKIE_PATH = os.getenv("AUTH_COOKIE_PATH", "/")
-SECURE_SSL_REDIRECT = os.getenv("DJANGO_SECURE_SSL_REDIRECT", "false").lower() == "true"
+SECURE_SSL_REDIRECT = os.getenv("DJANGO_SECURE_SSL_REDIRECT", "true" if not DEBUG else "false").lower() == "true"
 
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()

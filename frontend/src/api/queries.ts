@@ -25,6 +25,7 @@ import type {
   TaskChecklistItem,
   TaskComment,
   User,
+  UserSkill,
   VotePoll,
 } from "@/types/domain";
 
@@ -261,6 +262,35 @@ export async function fetchNotifications(): Promise<Notification[]> {
 
 export async function fetchUserPortfolio(userId: number): Promise<Achievement[]> {
   return api<Achievement[]>(`/users/${userId}/portfolio/`);
+}
+
+export async function updateUser(userId: number, payload: Partial<User>) {
+  return api<User>(`/users/${userId}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchUserSkills(userId: number): Promise<UserSkill[]> {
+  return api<UserSkill[]>(`/users/${userId}/skills/`);
+}
+
+export async function addUserSkill(userId: number, payload: Omit<UserSkill, "id">) {
+  return api<UserSkill>(`/users/${userId}/skills/`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateUserSkill(userId: number, skillId: number, payload: Partial<Omit<UserSkill, "id">>) {
+  return api<UserSkill>(`/users/${userId}/skills/${skillId}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteUserSkill(userId: number, skillId: number) {
+  return api<void>(`/users/${userId}/skills/${skillId}/`, { method: "DELETE" });
 }
 
 export async function fetchProjectBoard(projectId: number): Promise<KanbanBoard> {

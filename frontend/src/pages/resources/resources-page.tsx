@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { ApiError } from "@/api/client";
 import { createReservation, createResource, fetchReservations, fetchResources, queryKeys } from "@/api/queries";
 import { useAuth } from "@/app/providers/auth-provider";
 import { PageHeader } from "@/components/common/page-header";
@@ -9,20 +10,41 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
+function toErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError) {
+    if (error.status === 409) return "Wybrany zasob jest juz zarezerwowany w tym czasie. Wybierz inny termin.";
+    if (error.status === 403) return "Brak uprawnien do tej akcji.";
+    return error.message || fallback;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
+
 export function ResourcesPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { data: resources = [] } = useQuery({ queryKey: queryKeys.resources, queryFn: fetchResources });
   const { data: reservations = [] } = useQuery({ queryKey: queryKeys.reservations, queryFn: fetchReservations });
+  const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [reservationStatusFilter, setReservationStatusFilter] = useState("all");
   const [resourceForm, setResourceForm] = useState({ title: "", description: "", location: "", rules: "" });
   const [reservationForm, setReservationForm] = useState({ resource: "", start_at: "", end_at: "", purpose: "" });
+
+  const filteredReservations = useMemo(
+    () => reservations.filter((reservation) => (reservationStatusFilter === "all" ? true : reservation.status === reservationStatusFilter)),
+    [reservationStatusFilter, reservations],
+  );
 
   const createResourceMutation = useMutation({
     mutationFn: createResource,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.resources });
       setResourceForm({ title: "", description: "", location: "", rules: "" });
+      setFeedback("Zasob dodany.");
+      setError(null);
     },
+    onError: (mutationError) => setError(toErrorMessage(mutationError, "Nie udalo sie dodac zasobu.")),
   });
 
   const createReservationMutation = useMutation({
@@ -30,18 +52,20 @@ export function ResourcesPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.reservations });
       setReservationForm({ resource: "", start_at: "", end_at: "", purpose: "" });
+      setFeedback("Rezerwacja zapisana.");
+      setError(null);
     },
+    onError: (mutationError) => setError(toErrorMessage(mutationError, "Nie udalo sie zapisac rezerwacji.")),
   });
 
   return (
     <>
-      <PageHeader
-        eyebrow="Infrastruktura"
-        title="Zasoby i rezerwacje"
-        description="Zarządzanie sprzętem laboratoryjnym, salami i wspólną infrastrukturą."
-      />
+      <PageHeader eyebrow="Infrastruktura" title="Zasoby i rezerwacje" description="Zasoby, konflikty terminow i statusy rezerwacji." />
+      {feedback ? <div className="rounded-2xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700">{feedback}</div> : null}
+      {error ? <div className="rounded-2xl bg-rose-500/10 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
+
       {user?.global_role === "admin" ? (
-        <SectionCard title="Dodaj zasób">
+        <SectionCard title="Dodaj zasob">
           <div className="grid gap-3 md:grid-cols-2">
             <Input placeholder="Nazwa" value={resourceForm.title} onChange={(event) => setResourceForm((prev) => ({ ...prev, title: event.target.value }))} />
             <Input
@@ -65,13 +89,14 @@ export function ResourcesPage() {
                   is_active: true,
                 })
               }
-              disabled={!resourceForm.title}
+              disabled={!resourceForm.title || createResourceMutation.isPending}
             >
-              Dodaj zasób
+              Dodaj zasob
             </Button>
           </div>
         </SectionCard>
       ) : null}
+
       <SectionCard title="Nowa rezerwacja">
         <div className="grid gap-3 md:grid-cols-2">
           <select
@@ -79,7 +104,7 @@ export function ResourcesPage() {
             value={reservationForm.resource}
             onChange={(event) => setReservationForm((prev) => ({ ...prev, resource: event.target.value }))}
           >
-            <option value="">Wybierz zasób</option>
+            <option value="">Wybierz zasob</option>
             {resources.map((resource) => (
               <option key={resource.id} value={resource.id}>
                 {resource.title}
@@ -102,13 +127,14 @@ export function ResourcesPage() {
                 purpose: reservationForm.purpose,
               })
             }
-            disabled={!reservationForm.resource || !reservationForm.start_at || !reservationForm.end_at}
+            disabled={!reservationForm.resource || !reservationForm.start_at || !reservationForm.end_at || createReservationMutation.isPending}
           >
             Zarezerwuj
           </Button>
         </div>
       </SectionCard>
-      <SectionCard title="Dostępne zasoby">
+
+      <SectionCard title="Dostepne zasoby">
         <div className="grid gap-4 xl:grid-cols-2">
           {resources.map((resource) => (
             <article key={resource.id} className="rounded-[24px] border border-white/20 bg-white/60 p-5 dark:border-white/10 dark:bg-white/5">
@@ -119,12 +145,28 @@ export function ResourcesPage() {
           ))}
         </div>
       </SectionCard>
-      <SectionCard title="Moje rezerwacje">
+
+      <SectionCard title="Rezerwacje">
+        <div className="mb-3">
+          <select
+            className="h-10 rounded-xl border border-white/30 bg-white/70 px-3 text-xs dark:border-white/10 dark:bg-white/5"
+            value={reservationStatusFilter}
+            onChange={(event) => setReservationStatusFilter(event.target.value)}
+          >
+            <option value="all">all</option>
+            <option value="pending">pending</option>
+            <option value="approved">approved</option>
+            <option value="rejected">rejected</option>
+            <option value="cancelled">cancelled</option>
+          </select>
+        </div>
         <div className="space-y-3">
-          {reservations.map((reservation) => (
+          {filteredReservations.map((reservation) => (
             <article key={reservation.id} className="rounded-[22px] bg-white/60 p-4 text-sm dark:bg-white/5">
               <div className="flex items-center justify-between gap-3">
-                <p>#{reservation.resource} • {new Date(reservation.start_at).toLocaleString("pl-PL")}</p>
+                <p>
+                  #{reservation.resource} | {new Date(reservation.start_at).toLocaleString("pl-PL")}
+                </p>
                 <Badge>{reservation.status}</Badge>
               </div>
               <p className="mt-1 text-muted">{reservation.purpose || "Brak opisu celu."}</p>
