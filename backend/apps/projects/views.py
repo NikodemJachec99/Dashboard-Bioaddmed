@@ -1,12 +1,16 @@
+from django.contrib.contenttypes.models import ContentType
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from apps.audit.models import ActivityLog
 from apps.audit.services import log_activity
+from apps.core.models import FileAttachment
+from apps.core.serializers import FileAttachmentSerializer
 from apps.projects.models import (
     Project,
     ProjectLink,
@@ -39,6 +43,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
     serializer_class = ProjectSerializer
     search_fields = ["name", "slug", "short_description", "full_description"]
     filterset_fields = ["category", "stage", "status"]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def perform_create(self, serializer):
         if getattr(self.request.user, "global_role", None) != "admin":
@@ -67,6 +72,27 @@ class ProjectViewSet(viewsets.ModelViewSet):
         if getattr(request.user, "global_role", None) != "admin":
             return Response({"detail": "Tylko admin może tworzyć projekty."}, status=status.HTTP_403_FORBIDDEN)
         return super().create(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        project = self.get_object()
+        denied = self._ensure_manage_access(request, project)
+        if denied:
+            return denied
+        return super().partial_update(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        project = self.get_object()
+        denied = self._ensure_manage_access(request, project)
+        if denied:
+            return denied
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        project = self.get_object()
+        denied = self._ensure_manage_access(request, project)
+        if denied:
+            return denied
+        return super().destroy(request, *args, **kwargs)
 
     def _ensure_manage_access(self, request, project):
         if not is_project_coordinator(request.user, project):
@@ -316,3 +342,53 @@ class ProjectViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save(opening=opening, applicant=request.user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["get", "post"], url_path="attachments")
+    def attachments(self, request, pk=None):
+        project = self.get_object()
+        denied = self._ensure_member_access(request, project)
+        if denied:
+            return denied
+        attachment_queryset = FileAttachment.objects.filter(
+            content_type=ContentType.objects.get_for_model(Project),
+            object_id=project.id,
+        ).select_related("uploaded_by")
+        if request.method == "GET":
+            serializer = FileAttachmentSerializer(attachment_queryset, many=True, context={"request": request})
+            return Response(serializer.data)
+
+        upload = request.FILES.get("file")
+        if not upload:
+            return Response({"detail": "Plik jest wymagany."}, status=status.HTTP_400_BAD_REQUEST)
+
+        attachment = FileAttachment.objects.create(
+            uploaded_by=request.user,
+            file=upload,
+            label=request.data.get("label") or upload.name,
+            content_object=project,
+            metadata_json={"scope": "project", "project_id": project.id},
+        )
+        log_activity(
+            user=request.user,
+            action_type="project.attachment.created",
+            entity_type="project",
+            entity_id=project.id,
+            description=f"Dodano plik {attachment.label} do projektu {project.name}.",
+        )
+        serializer = FileAttachmentSerializer(attachment, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["delete"], url_path=r"attachments/(?P<attachment_id>\d+)")
+    def attachment_detail(self, request, pk=None, attachment_id=None):
+        project = self.get_object()
+        denied = self._ensure_manage_access(request, project)
+        if denied:
+            return denied
+        attachment = get_object_or_404(
+            FileAttachment.objects.select_related("uploaded_by"),
+            pk=attachment_id,
+            content_type=ContentType.objects.get_for_model(Project),
+            object_id=project.id,
+        )
+        attachment.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

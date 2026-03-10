@@ -36,6 +36,20 @@ export type ProjectMembership = {
   is_active?: boolean;
 };
 
+export type FileAttachment = {
+  id: number;
+  label: string;
+  file?: string;
+  file_url: string;
+  file_name: string;
+  file_size?: number | null;
+  uploaded_by?: number | null;
+  uploaded_by_email?: string;
+  metadata_json?: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Task = {
   id: number;
   project?: number;

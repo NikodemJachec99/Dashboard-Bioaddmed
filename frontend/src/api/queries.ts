@@ -5,6 +5,7 @@ import type {
   DashboardAdminSummary,
   DashboardMySummary,
   DashboardOverview,
+  FileAttachment,
   KanbanBoard,
   KnowledgeArticle,
   Meeting,
@@ -326,12 +327,20 @@ export async function fetchProjectLinks(projectId: number): Promise<ProjectLink[
   return api<ProjectLink[]>(`/projects/${projectId}/links/`);
 }
 
+export async function fetchProjectAttachments(projectId: number): Promise<FileAttachment[]> {
+  return api<FileAttachment[]>(`/projects/${projectId}/attachments/`);
+}
+
 export async function fetchProjectMeetings(projectId: number): Promise<Meeting[]> {
   return unwrapList(await api<Meeting[] | Paginated<Meeting>>(`/meetings/?related_project=${projectId}`));
 }
 
 export async function fetchProjectKnowledge(projectId: number): Promise<KnowledgeArticle[]> {
   return unwrapList(await api<KnowledgeArticle[] | Paginated<KnowledgeArticle>>(`/knowledge/?related_project=${projectId}`));
+}
+
+export async function fetchTaskAttachments(taskId: number): Promise<FileAttachment[]> {
+  return api<FileAttachment[]>(`/tasks/${taskId}/attachments/`);
 }
 
 export async function createUser(payload: CreateUserPayload) {
@@ -393,6 +402,20 @@ export async function updateProjectLink(projectId: number, linkId: number, paylo
 
 export async function deleteProjectLink(projectId: number, linkId: number) {
   return api<void>(`/projects/${projectId}/links/${linkId}/`, { method: "DELETE" });
+}
+
+export async function uploadProjectAttachment(projectId: number, payload: { label?: string; file: File }) {
+  const body = new FormData();
+  if (payload.label) body.append("label", payload.label);
+  body.append("file", payload.file);
+  return api<FileAttachment>(`/projects/${projectId}/attachments/`, {
+    method: "POST",
+    body,
+  });
+}
+
+export async function deleteProjectAttachment(projectId: number, attachmentId: number) {
+  return api<void>(`/projects/${projectId}/attachments/${attachmentId}/`, { method: "DELETE" });
 }
 
 export async function createProjectMilestone(projectId: number, payload: CreateProjectMilestonePayload) {
@@ -497,6 +520,20 @@ export async function addTaskChecklistItem(taskId: number, payload: { content: s
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export async function uploadTaskAttachment(taskId: number, payload: { label?: string; file: File }) {
+  const body = new FormData();
+  if (payload.label) body.append("label", payload.label);
+  body.append("file", payload.file);
+  return api<FileAttachment>(`/tasks/${taskId}/attachments/`, {
+    method: "POST",
+    body,
+  });
+}
+
+export async function deleteTaskAttachment(taskId: number, attachmentId: number) {
+  return api<void>(`/tasks/${taskId}/attachments/${attachmentId}/`, { method: "DELETE" });
 }
 
 export async function createMeeting(payload: CreateMeetingPayload) {

@@ -18,8 +18,12 @@ import {
   deleteProjectMember,
   deleteProjectMilestone,
   deleteProjectRisk,
+  deleteProjectAttachment,
   deleteRecruitmentOpening,
+  deleteTask,
+  deleteTaskAttachment,
   fetchProjectActivity,
+  fetchProjectAttachments,
   fetchProjectBoard,
   fetchProjectKnowledge,
   fetchProjectLinks,
@@ -34,12 +38,16 @@ import {
   fetchUsers,
   moveTask,
   queryKeys,
+  updateTask,
   updateProject,
   updateProjectLink,
   updateProjectMember,
   updateProjectMilestone,
   updateProjectRisk,
   updateRecruitmentOpening,
+  uploadProjectAttachment,
+  uploadTaskAttachment,
+  fetchTaskAttachments,
 } from "@/api/queries";
 import { useAuth } from "@/app/providers/auth-provider";
 import { KanbanBoard } from "@/components/common/kanban-board";
@@ -50,7 +58,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BookOpen, Calendar, FolderKanban, RadioTower, Settings2, Trophy, Users } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
-import type { KanbanColumn, KnowledgeArticle, Meeting, ProjectMembership, Task, User } from "@/types/domain";
+import type { FileAttachment, KanbanColumn, KnowledgeArticle, Meeting, ProjectMembership, Task, User } from "@/types/domain";
 
 type ProjectTab = "overview" | "kanban" | "delivery" | "people" | "files" | "activity" | "settings";
 
@@ -145,6 +153,13 @@ function formatDateTime(value?: string | null) {
   return new Date(value).toLocaleString("pl-PL");
 }
 
+function formatFileSize(bytes?: number | null) {
+  if (!bytes) return "brak rozmiaru";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function tabMeta(tab: ProjectTab) {
   if (tab === "overview") return { title: "Overview", description: "Executive summary, health i rytm projektu", icon: <Trophy size={16} /> };
   if (tab === "kanban") return { title: "Kanban", description: "Board delivery z task side rail", icon: <FolderKanban size={16} /> };
@@ -233,8 +248,23 @@ export function ProjectDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ProjectTab>("overview");
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [taskSearch, setTaskSearch] = useState("");
+  const [taskOwnerFilter, setTaskOwnerFilter] = useState<"all" | "mine" | "unassigned">("all");
+  const [taskRiskFilter, setTaskRiskFilter] = useState<"all" | "blockers" | "overdue" | "urgent">("all");
 
   const [taskForm, setTaskForm] = useState({ title: "", description: "", priority: "medium", assignee: "" });
+  const [taskEditForm, setTaskEditForm] = useState({
+    title: "",
+    description: "",
+    status: "todo",
+    priority: "medium",
+    assignee: "",
+    due_date: "",
+    estimated_hours: "",
+    actual_hours: "",
+    is_blocker: false,
+  });
   const [commentTextByTask, setCommentTextByTask] = useState<Record<number, string>>({});
   const [checklistTextByTask, setChecklistTextByTask] = useState<Record<number, string>>({});
   const [milestoneForm, setMilestoneForm] = useState({ title: "", due_date: "", progress_percent: "0" });
@@ -251,6 +281,8 @@ export function ProjectDetailPage() {
     progress_percent: "0",
   });
   const [memberForm, setMemberForm] = useState({ user: "", project_role: "member" as ProjectMembership["project_role"] });
+  const [projectFileForm, setProjectFileForm] = useState({ label: "", file: null as File | null });
+  const [taskFileForm, setTaskFileForm] = useState({ label: "", file: null as File | null });
 
   const { data: projects = [] } = useQuery({ queryKey: queryKeys.projects, queryFn: fetchProjects });
   const project = useMemo(() => projects.find((item) => item.slug === slug) ?? projects[0], [projects, slug]);
@@ -306,6 +338,11 @@ export function ProjectDetailPage() {
     queryFn: () => fetchProjectLinks(project!.id),
     enabled: Boolean(project?.id && isProjectMember),
   });
+  const { data: attachments = [] } = useQuery({
+    queryKey: ["project-attachments", project?.id],
+    queryFn: () => fetchProjectAttachments(project!.id),
+    enabled: Boolean(project?.id && isProjectMember),
+  });
   const { data: meetings = [] } = useQuery({
     queryKey: ["project-meetings", project?.id],
     queryFn: () => fetchProjectMeetings(project!.id),
@@ -315,6 +352,11 @@ export function ProjectDetailPage() {
     queryKey: ["project-knowledge", project?.id],
     queryFn: () => fetchProjectKnowledge(project!.id),
     enabled: Boolean(project?.id && isProjectMember),
+  });
+  const { data: taskAttachments = [] } = useQuery({
+    queryKey: ["task-attachments", selectedTaskId],
+    queryFn: () => fetchTaskAttachments(selectedTaskId!),
+    enabled: Boolean(selectedTaskId && isProjectMember),
   });
 
   const [columnsState, setColumnsState] = useState<KanbanColumn[]>([]);
@@ -346,8 +388,10 @@ export function ProjectDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["project-risks", project?.id] }),
       queryClient.invalidateQueries({ queryKey: ["project-recruitment", project?.id] }),
       queryClient.invalidateQueries({ queryKey: ["project-links", project?.id] }),
+      queryClient.invalidateQueries({ queryKey: ["project-attachments", project?.id] }),
       queryClient.invalidateQueries({ queryKey: ["project-meetings", project?.id] }),
       queryClient.invalidateQueries({ queryKey: ["project-knowledge", project?.id] }),
+      queryClient.invalidateQueries({ queryKey: ["task-attachments", selectedTaskId] }),
     ]);
   };
 
@@ -368,11 +412,61 @@ export function ProjectDetailPage() {
     if (!selectedTaskId && tasks.length > 0) setSelectedTaskId(tasks[0].id);
   }, [selectedTaskId, tasks]);
 
+  useEffect(() => {
+    if (!selectedTask) return;
+    setTaskEditForm({
+      title: selectedTask.title ?? "",
+      description: selectedTask.description ?? "",
+      status: selectedTask.status ?? "todo",
+      priority: selectedTask.priority ?? "medium",
+      assignee: selectedTask.assignee ? String(selectedTask.assignee) : "",
+      due_date: selectedTask.due_date ?? "",
+      estimated_hours: selectedTask.estimated_hours ? String(selectedTask.estimated_hours) : "",
+      actual_hours: selectedTask.actual_hours ? String(selectedTask.actual_hours) : "",
+      is_blocker: Boolean(selectedTask.is_blocker),
+    });
+  }, [selectedTask]);
+
   const canMoveTask = (taskId: number) => {
     if (canManageProject) return true;
     const task = tasks.find((item) => item.id === taskId);
     return Boolean(task && task.assignee === user?.id);
   };
+  const canEditSelectedTask = Boolean(selectedTask && canMoveTask(selectedTask.id));
+  const canManageSelectedTask = Boolean(selectedTask && canManageProject);
+
+  const filteredColumns = useMemo(() => {
+    const search = taskSearch.trim().toLowerCase();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return columnsState.map((column) => ({
+      ...column,
+      tasks: column.tasks.filter((task) => {
+        const matchesSearch =
+          !search ||
+          task.title.toLowerCase().includes(search) ||
+          task.description.toLowerCase().includes(search) ||
+          (task.assignee_email ?? "").toLowerCase().includes(search);
+
+        const matchesOwner =
+          taskOwnerFilter === "all" ||
+          (taskOwnerFilter === "mine" && task.assignee === user?.id) ||
+          (taskOwnerFilter === "unassigned" && !task.assignee);
+
+        const dueDate = task.due_date ? new Date(task.due_date) : null;
+        if (dueDate) dueDate.setHours(0, 0, 0, 0);
+        const isOverdue = Boolean(dueDate && dueDate.getTime() < today.getTime() && task.status !== "done");
+        const matchesRisk =
+          taskRiskFilter === "all" ||
+          (taskRiskFilter === "blockers" && task.is_blocker) ||
+          (taskRiskFilter === "overdue" && isOverdue) ||
+          (taskRiskFilter === "urgent" && task.priority === "urgent");
+
+        return matchesSearch && matchesOwner && matchesRisk;
+      }),
+    }));
+  }, [columnsState, taskOwnerFilter, taskRiskFilter, taskSearch, user?.id]);
 
   const createTaskMutation = useMutation({
     mutationFn: createTask,
@@ -415,6 +509,26 @@ export function ProjectDetailPage() {
       await refresh();
     },
     onError: (mutationError) => setError(domainError(mutationError, "Nie udalo sie dodac checklisty.")),
+  });
+
+  const updateTaskMutation = useMutation({
+    mutationFn: ({ taskId, payload }: { taskId: number; payload: Record<string, unknown> }) => updateTask(taskId, payload),
+    onSuccess: async () => {
+      setFeedback("Task zostal zaktualizowany.");
+      setError(null);
+      await refresh();
+    },
+    onError: (mutationError) => setError(domainError(mutationError, "Nie udalo sie zapisac taska.")),
+  });
+
+  const deleteTaskMutation = useMutation({
+    mutationFn: (taskId: number) => deleteTask(taskId),
+    onSuccess: async () => {
+      setIsTaskModalOpen(false);
+      setSelectedTaskId(null);
+      await refresh();
+    },
+    onError: (mutationError) => setError(domainError(mutationError, "Nie udalo sie usunac taska.")),
   });
 
   const createMilestoneMutation = useMutation({
@@ -480,6 +594,36 @@ export function ProjectDetailPage() {
     onError: (mutationError) => setError(domainError(mutationError, "Nie udalo sie usunac linku.")),
   });
 
+  const uploadProjectAttachmentMutation = useMutation({
+    mutationFn: () => uploadProjectAttachment(project!.id, { label: projectFileForm.label, file: projectFileForm.file! }),
+    onSuccess: async () => {
+      setProjectFileForm({ label: "", file: null });
+      await refresh();
+    },
+    onError: (mutationError) => setError(domainError(mutationError, "Nie udalo sie dodac pliku projektu.")),
+  });
+
+  const deleteProjectAttachmentMutation = useMutation({
+    mutationFn: (attachmentId: number) => deleteProjectAttachment(project!.id, attachmentId),
+    onSuccess: refresh,
+    onError: (mutationError) => setError(domainError(mutationError, "Nie udalo sie usunac pliku projektu.")),
+  });
+
+  const uploadTaskAttachmentMutation = useMutation({
+    mutationFn: () => uploadTaskAttachment(selectedTask!.id, { label: taskFileForm.label, file: taskFileForm.file! }),
+    onSuccess: async () => {
+      setTaskFileForm({ label: "", file: null });
+      await refresh();
+    },
+    onError: (mutationError) => setError(domainError(mutationError, "Nie udalo sie dodac pliku do taska.")),
+  });
+
+  const deleteTaskAttachmentMutation = useMutation({
+    mutationFn: (attachmentId: number) => deleteTaskAttachment(selectedTask!.id, attachmentId),
+    onSuccess: refresh,
+    onError: (mutationError) => setError(domainError(mutationError, "Nie udalo sie usunac pliku z taska.")),
+  });
+
   const addMemberMutation = useMutation({
     mutationFn: () => addProjectMember(project!.id, { user: Number(memberForm.user), project_role: memberForm.project_role }),
     onSuccess: async () => {
@@ -536,7 +680,7 @@ export function ProjectDetailPage() {
     kanban: tasks.length,
     delivery: milestones.length + risks.length,
     people: projectMembers.length + recruitment.length,
-    files: links.length + knowledge.length,
+    files: links.length + knowledge.length + attachments.length,
     activity: timeline.length,
     settings: 2,
   };
@@ -742,7 +886,7 @@ export function ProjectDetailPage() {
           <SectionCard title="Execution board" description="Prawdziwa tablica delivery z wyraznymi kolumnami, ruchem kart i szybkim dodawaniem pracy do backlogu.">
             {isProjectMember ? (
               <>
-                <div className="mb-5 grid gap-3 md:grid-cols-[1.1fr_1.1fr_.8fr_.8fr_auto]">
+                <div className="mb-4 grid gap-3 xl:grid-cols-[1fr_1fr_.8fr_.8fr_auto]">
                   <Input placeholder="Tytul taska" value={taskForm.title} onChange={(event) => setTaskForm((previous) => ({ ...previous, title: event.target.value }))} />
                   <Input placeholder="Opis taska" value={taskForm.description} onChange={(event) => setTaskForm((previous) => ({ ...previous, description: event.target.value }))} />
                   <select
@@ -786,8 +930,32 @@ export function ProjectDetailPage() {
                   </Button>
                 </div>
 
+                <div className="mb-5 grid gap-3 md:grid-cols-[1.2fr_.8fr_.8fr_auto]">
+                  <Input placeholder="Szukaj taska, assignee lub opisu" value={taskSearch} onChange={(event) => setTaskSearch(event.target.value)} />
+                  <select
+                    className="h-12 rounded-2xl border border-white/30 bg-white/70 px-4 text-sm dark:border-white/10 dark:bg-white/5"
+                    value={taskOwnerFilter}
+                    onChange={(event) => setTaskOwnerFilter(event.target.value as "all" | "mine" | "unassigned")}
+                  >
+                    <option value="all">wszyscy</option>
+                    <option value="mine">moje taski</option>
+                    <option value="unassigned">bez assignee</option>
+                  </select>
+                  <select
+                    className="h-12 rounded-2xl border border-white/30 bg-white/70 px-4 text-sm dark:border-white/10 dark:bg-white/5"
+                    value={taskRiskFilter}
+                    onChange={(event) => setTaskRiskFilter(event.target.value as "all" | "blockers" | "overdue" | "urgent")}
+                  >
+                    <option value="all">wszystkie</option>
+                    <option value="blockers">blockers</option>
+                    <option value="overdue">overdue</option>
+                    <option value="urgent">urgent</option>
+                  </select>
+                  <div className="flex items-center justify-end text-xs text-muted">{filteredColumns.reduce((sum, column) => sum + column.tasks.length, 0)} kart</div>
+                </div>
+
                 <KanbanBoard
-                  columns={columnsState}
+                  columns={filteredColumns}
                   taskLookup={taskLookup}
                   selectedTaskId={selectedTaskId}
                   canDragTask={(taskId) => canMoveTask(taskId)}
@@ -825,6 +993,11 @@ export function ProjectDetailPage() {
                       <p className="text-xs text-muted">Due date</p>
                       <p className="mt-1 font-medium">{formatDate(selectedTask.due_date)}</p>
                     </div>
+                  </div>
+                  <div className="mt-4">
+                    <Button variant="secondary" onClick={() => setIsTaskModalOpen(true)}>
+                      Otworz pelny widok taska
+                    </Button>
                   </div>
                 </div>
 
@@ -1233,6 +1406,48 @@ export function ProjectDetailPage() {
               </div>
             </div>
 
+            <div className="mb-5 rounded-[28px] border border-white/30 bg-white/55 p-4 dark:border-white/10 dark:bg-white/5">
+              <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                <Input
+                  placeholder="Etykieta pliku projektu"
+                  value={projectFileForm.label}
+                  onChange={(event) => setProjectFileForm((previous) => ({ ...previous, label: event.target.value }))}
+                />
+                <Input
+                  type="file"
+                  onChange={(event) => setProjectFileForm((previous) => ({ ...previous, file: event.target.files?.[0] ?? null }))}
+                />
+                <Button className="h-12" disabled={!projectFileForm.file} onClick={() => uploadProjectAttachmentMutation.mutate()}>
+                  Dodaj plik
+                </Button>
+              </div>
+            </div>
+
+            <div className="mb-6 grid gap-4 md:grid-cols-2">
+              {attachments.map((attachment) => (
+                <article key={attachment.id} className="tile-soft p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <Badge tone="success">file</Badge>
+                      <h3 className="mt-3 font-semibold">{attachment.label}</h3>
+                      <a className="mt-2 inline-flex text-sm text-accent underline" href={attachment.file_url} target="_blank" rel="noreferrer">
+                        {attachment.file_name}
+                      </a>
+                      <p className="mt-2 text-xs text-muted">
+                        {formatFileSize(attachment.file_size)} | {attachment.uploaded_by_email ?? "system"} | {formatDateTime(attachment.created_at)}
+                      </p>
+                    </div>
+                    {canManageProject ? (
+                      <Button variant="ghost" onClick={() => deleteProjectAttachmentMutation.mutate(attachment.id)}>
+                        Usun
+                      </Button>
+                    ) : null}
+                  </div>
+                </article>
+              ))}
+              {attachments.length === 0 ? <p className="text-sm text-muted">Brak plikow w hubie projektu.</p> : null}
+            </div>
+
             {canManageProject ? (
               <div className="mb-5 grid gap-3 md:grid-cols-[.9fr_1.2fr_.8fr_auto]">
                 <Input placeholder="Etykieta" value={linkForm.label} onChange={(event) => setLinkForm((previous) => ({ ...previous, label: event.target.value }))} />
@@ -1494,6 +1709,189 @@ export function ProjectDetailPage() {
                 </Button>
               </div>
             </SectionCard>
+          </div>
+        </div>
+      ) : null}
+
+      {isTaskModalOpen && selectedTask ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-md">
+          <div className="max-h-[92vh] w-full max-w-5xl overflow-auto rounded-[36px] border border-white/20 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(245,251,255,0.92))] p-6 shadow-[0_40px_120px_rgba(15,23,42,0.32)] dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(2,6,23,0.96),rgba(15,23,42,0.94))]">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.18em] text-muted">Task control room</p>
+                <h2 className="mt-2 text-2xl font-extrabold tracking-[-0.03em]">{selectedTask.title}</h2>
+                <p className="mt-2 text-sm text-muted">Pelna edycja taska, ownership, pliki i execution details.</p>
+              </div>
+              <Button variant="ghost" onClick={() => setIsTaskModalOpen(false)}>
+                Zamknij
+              </Button>
+            </div>
+
+            <div className="grid gap-6 xl:grid-cols-[1.05fr_.95fr]">
+              <SectionCard title="Task editor" description="Tu ustawiasz pelne dane zadania i zapisujesz je jednym ruchem.">
+                <div className="space-y-4">
+                  <Input value={taskEditForm.title} disabled={!canManageSelectedTask} onChange={(event) => setTaskEditForm((previous) => ({ ...previous, title: event.target.value }))} />
+                  <textarea
+                    className="min-h-[160px] rounded-[24px] border border-white/30 bg-white/70 px-4 py-4 text-sm outline-none transition focus:border-accent dark:border-white/10 dark:bg-white/5"
+                    value={taskEditForm.description}
+                    disabled={!canManageSelectedTask}
+                    onChange={(event) => setTaskEditForm((previous) => ({ ...previous, description: event.target.value }))}
+                  />
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <select
+                      className="h-12 rounded-2xl border border-white/30 bg-white/70 px-4 text-sm dark:border-white/10 dark:bg-white/5"
+                      value={taskEditForm.status}
+                      disabled={!canEditSelectedTask}
+                      onChange={(event) => setTaskEditForm((previous) => ({ ...previous, status: event.target.value }))}
+                    >
+                      <option value="backlog">backlog</option>
+                      <option value="todo">todo</option>
+                      <option value="in_progress">in_progress</option>
+                      <option value="review">review</option>
+                      <option value="done">done</option>
+                      <option value="blocked">blocked</option>
+                    </select>
+                    <select
+                      className="h-12 rounded-2xl border border-white/30 bg-white/70 px-4 text-sm dark:border-white/10 dark:bg-white/5"
+                      value={taskEditForm.priority}
+                      disabled={!canManageSelectedTask}
+                      onChange={(event) => setTaskEditForm((previous) => ({ ...previous, priority: event.target.value }))}
+                    >
+                      <option value="low">low</option>
+                      <option value="medium">medium</option>
+                      <option value="high">high</option>
+                      <option value="urgent">urgent</option>
+                    </select>
+                    <select
+                      className="h-12 rounded-2xl border border-white/30 bg-white/70 px-4 text-sm dark:border-white/10 dark:bg-white/5"
+                      value={taskEditForm.assignee}
+                      disabled={!canManageSelectedTask}
+                      onChange={(event) => setTaskEditForm((previous) => ({ ...previous, assignee: event.target.value }))}
+                    >
+                      <option value="">bez assignee</option>
+                      {projectMembers.map((member) => (
+                        <option key={member.id} value={member.user}>
+                          {member.user_name}
+                        </option>
+                      ))}
+                    </select>
+                    <Input type="date" value={taskEditForm.due_date} onChange={(event) => setTaskEditForm((previous) => ({ ...previous, due_date: event.target.value }))} disabled={!canManageSelectedTask} />
+                    <Input
+                      type="number"
+                      step="0.5"
+                      placeholder="Est. hours"
+                      value={taskEditForm.estimated_hours}
+                      disabled={!canManageSelectedTask}
+                      onChange={(event) => setTaskEditForm((previous) => ({ ...previous, estimated_hours: event.target.value }))}
+                    />
+                    <Input
+                      type="number"
+                      step="0.5"
+                      placeholder="Actual hours"
+                      value={taskEditForm.actual_hours}
+                      disabled={!canEditSelectedTask}
+                      onChange={(event) => setTaskEditForm((previous) => ({ ...previous, actual_hours: event.target.value }))}
+                    />
+                  </div>
+                  <label className="flex items-center gap-3 rounded-[20px] bg-white/80 px-4 py-3 text-sm dark:bg-white/5">
+                    <input
+                      type="checkbox"
+                      checked={taskEditForm.is_blocker}
+                      disabled={!canManageSelectedTask}
+                      onChange={(event) => setTaskEditForm((previous) => ({ ...previous, is_blocker: event.target.checked }))}
+                    />
+                    Oznacz jako blocker
+                  </label>
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      disabled={!canEditSelectedTask}
+                      onClick={() =>
+                        updateTaskMutation.mutate({
+                          taskId: selectedTask.id,
+                          payload: canManageSelectedTask
+                            ? {
+                                title: taskEditForm.title,
+                                description: taskEditForm.description,
+                                status: taskEditForm.status,
+                                priority: taskEditForm.priority,
+                                assignee: taskEditForm.assignee ? Number(taskEditForm.assignee) : null,
+                                due_date: taskEditForm.due_date || null,
+                                estimated_hours: taskEditForm.estimated_hours || null,
+                                actual_hours: taskEditForm.actual_hours || null,
+                                is_blocker: taskEditForm.is_blocker,
+                              }
+                            : {
+                                status: taskEditForm.status,
+                                actual_hours: taskEditForm.actual_hours || null,
+                              },
+                        })
+                      }
+                    >
+                      Zapisz task
+                    </Button>
+                    <Button variant="ghost" disabled={!canManageSelectedTask} onClick={() => deleteTaskMutation.mutate(selectedTask.id)}>
+                      Usun task
+                    </Button>
+                  </div>
+                </div>
+              </SectionCard>
+
+              <div className="grid gap-6">
+                <SectionCard title="Task files" description="Pliki robocze, screenshoty i materialy pomocnicze tylko dla tego zadania.">
+                  <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                    <Input value={taskFileForm.label} placeholder="Etykieta pliku" onChange={(event) => setTaskFileForm((previous) => ({ ...previous, label: event.target.value }))} />
+                    <Input type="file" onChange={(event) => setTaskFileForm((previous) => ({ ...previous, file: event.target.files?.[0] ?? null }))} />
+                    <Button className="h-12" disabled={!taskFileForm.file} onClick={() => uploadTaskAttachmentMutation.mutate()}>
+                      Dodaj plik
+                    </Button>
+                  </div>
+                  <div className="mt-4 space-y-3">
+                    {taskAttachments.map((attachment: FileAttachment) => (
+                      <div key={attachment.id} className="rounded-[20px] bg-white/80 px-4 py-4 dark:bg-white/5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-medium">{attachment.label}</p>
+                            <a className="mt-1 inline-flex text-sm text-accent underline" href={attachment.file_url} target="_blank" rel="noreferrer">
+                              {attachment.file_name}
+                            </a>
+                            <p className="mt-1 text-xs text-muted">
+                              {formatFileSize(attachment.file_size)} | {attachment.uploaded_by_email ?? "system"} | {formatDateTime(attachment.created_at)}
+                            </p>
+                          </div>
+                          {(canManageProject || attachment.uploaded_by === user?.id) ? (
+                            <Button variant="ghost" onClick={() => deleteTaskAttachmentMutation.mutate(attachment.id)}>
+                              Usun
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                    {taskAttachments.length === 0 ? <p className="text-sm text-muted">Brak plikow przypietych do taska.</p> : null}
+                  </div>
+                </SectionCard>
+
+                <SectionCard title="Task summary" description="Szybki kontekst dla zadania: status, ownership i execution pressure.">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="tile-soft p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted">Status</p>
+                      <p className="mt-2 text-lg font-semibold">{selectedTask.status}</p>
+                    </div>
+                    <div className="tile-soft p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted">Assignee</p>
+                      <p className="mt-2 text-lg font-semibold">{selectedTask.assignee_email ?? "bez assignee"}</p>
+                    </div>
+                    <div className="tile-soft p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted">Due date</p>
+                      <p className="mt-2 text-lg font-semibold">{formatDate(selectedTask.due_date)}</p>
+                    </div>
+                    <div className="tile-soft p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted">Pressure</p>
+                      <p className="mt-2 text-lg font-semibold">{selectedTask.is_blocker ? "blocker" : selectedTask.priority}</p>
+                    </div>
+                  </div>
+                </SectionCard>
+              </div>
+            </div>
           </div>
         </div>
       ) : null}
