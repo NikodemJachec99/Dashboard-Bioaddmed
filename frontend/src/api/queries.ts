@@ -12,6 +12,7 @@ import type {
   MeetingParticipant,
   Notification,
   Project,
+  ProjectLink,
   ProjectMilestone,
   ProjectRisk,
   ProjectHealth,
@@ -317,6 +318,10 @@ export async function fetchProjectRecruitment(projectId: number): Promise<Recrui
   return api<RecruitmentOpening[]>(`/projects/${projectId}/recruitment/`);
 }
 
+export async function fetchProjectLinks(projectId: number): Promise<ProjectLink[]> {
+  return api<ProjectLink[]>(`/projects/${projectId}/links/`);
+}
+
 export async function fetchProjectMeetings(projectId: number): Promise<Meeting[]> {
   return unwrapList(await api<Meeting[] | Paginated<Meeting>>(`/meetings/?related_project=${projectId}`));
 }
@@ -339,11 +344,33 @@ export async function createProject(payload: CreateProjectPayload) {
   });
 }
 
+export async function deleteUser(userId: number) {
+  return api<void>(`/users/${userId}/`, { method: "DELETE" });
+}
+
 export async function addProjectMember(projectId: number, payload: AddProjectMemberPayload) {
   return api<ProjectMembership>(`/projects/${projectId}/members/`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export async function createProjectLink(projectId: number, payload: { label: string; url: string; type?: string }) {
+  return api<ProjectLink>(`/projects/${projectId}/links/`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateProjectLink(projectId: number, linkId: number, payload: Partial<{ label: string; url: string; type: string }>) {
+  return api<ProjectLink>(`/projects/${projectId}/links/${linkId}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteProjectLink(projectId: number, linkId: number) {
+  return api<void>(`/projects/${projectId}/links/${linkId}/`, { method: "DELETE" });
 }
 
 export async function createProjectMilestone(projectId: number, payload: CreateProjectMilestonePayload) {

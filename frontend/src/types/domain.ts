@@ -102,10 +102,20 @@ export type Project = {
   planned_end_date?: string;
   actual_end_date?: string;
   memberships: ProjectMembership[];
+  links?: ProjectLink[];
   milestones?: ProjectMilestone[];
   risks?: ProjectRisk[];
   recruitment_openings?: RecruitmentOpening[];
   tasks?: Task[];
+};
+
+export type ProjectLink = {
+  id: number;
+  label: string;
+  url: string;
+  type: string;
+  created_at?: string;
+  updated_at?: string;
 };
 
 export type ProjectMilestone = {

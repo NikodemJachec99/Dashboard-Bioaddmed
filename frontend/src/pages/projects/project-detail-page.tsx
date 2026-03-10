@@ -17,6 +17,7 @@ import {
   deleteRecruitmentOpening,
   fetchProjectActivity,
   fetchProjectBoard,
+  fetchProjectLinks,
   fetchProjectMilestones,
   fetchProjectOverview,
   fetchProjectRecruitment,
@@ -26,8 +27,11 @@ import {
   moveTask,
   queryKeys,
   updateProjectMilestone,
+  updateProjectLink,
   updateProjectRisk,
   updateRecruitmentOpening,
+  createProjectLink,
+  deleteProjectLink,
 } from "@/api/queries";
 import { useAuth } from "@/app/providers/auth-provider";
 import { KanbanBoard } from "@/components/common/kanban-board";
@@ -126,6 +130,11 @@ export function ProjectDetailPage() {
     queryFn: () => fetchProjectRecruitment(project!.id),
     enabled: Boolean(project?.id && isProjectMember),
   });
+  const { data: links = [] } = useQuery({
+    queryKey: ["project-links", project?.id],
+    queryFn: () => fetchProjectLinks(project!.id),
+    enabled: Boolean(project?.id && isProjectMember),
+  });
 
   const [columnsState, setColumnsState] = useState<KanbanColumn[]>([]);
   useEffect(() => {
@@ -139,6 +148,8 @@ export function ProjectDetailPage() {
   const [riskForm, setRiskForm] = useState({ title: "", description: "", severity: "medium", status: "open" });
   const [openingForm, setOpeningForm] = useState({ title: "", description: "", competencies: "" });
   const [applyByOpening, setApplyByOpening] = useState<Record<number, { motivation: string; availability_note: string }>>({});
+  const [linkForm, setLinkForm] = useState({ label: "", url: "", type: "github" });
+  const [editingLinkId, setEditingLinkId] = useState<number | null>(null);
 
   const refresh = async () => {
     await Promise.all([
@@ -148,6 +159,7 @@ export function ProjectDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["project-milestones", project?.id] }),
       queryClient.invalidateQueries({ queryKey: ["project-risks", project?.id] }),
       queryClient.invalidateQueries({ queryKey: ["project-recruitment", project?.id] }),
+      queryClient.invalidateQueries({ queryKey: ["project-links", project?.id] }),
       queryClient.invalidateQueries({ queryKey: queryKeys.projects }),
     ]);
   };
@@ -234,6 +246,35 @@ export function ProjectDetailPage() {
     },
     onError: (e) => setError(domainError(e, "Nie udalo sie dodac rekrutacji.")),
   });
+  const createLinkMutation = useMutation({
+    mutationFn: () =>
+      createProjectLink(project!.id, {
+        label: linkForm.label,
+        url: linkForm.url,
+        type: linkForm.type,
+      }),
+    onSuccess: async () => {
+      setLinkForm({ label: "", url: "", type: "github" });
+      await refresh();
+    },
+    onError: (e) => setError(domainError(e, "Nie udalo sie dodac linku.")),
+  });
+  const updateLinkMutation = useMutation({
+    mutationFn: ({ linkId, payload }: { linkId: number; payload: { label?: string; url?: string; type?: string } }) =>
+      updateProjectLink(project!.id, linkId, payload),
+    onSuccess: async () => {
+      setEditingLinkId(null);
+      await refresh();
+    },
+    onError: (e) => setError(domainError(e, "Nie udalo sie zaktualizowac linku.")),
+  });
+  const deleteLinkMutation = useMutation({
+    mutationFn: (linkId: number) => deleteProjectLink(project!.id, linkId),
+    onSuccess: async () => {
+      await refresh();
+    },
+    onError: (e) => setError(domainError(e, "Nie udalo sie usunac linku.")),
+  });
   const archiveMutation = useMutation({
     mutationFn: () => archiveProject(project!.id),
     onSuccess: refresh,
@@ -299,6 +340,59 @@ export function ProjectDetailPage() {
             <div className="space-y-2 text-sm text-muted">
               <p>Etap: {project.stage}</p><p>Status: {project.status}</p><p>Progress: {project.progress_percent}%</p>
               <p>Taski: {overview?.stats?.total_tasks ?? 0}</p><p>Overdue: {overview?.stats?.overdue ?? 0}</p><p>Czlonkowie: {overview?.stats?.members ?? 0}</p>
+            </div>
+          </SectionCard>
+          <SectionCard title="Linki projektu">
+            {canManageProject ? (
+              <div className="mb-3 grid gap-2">
+                <Input placeholder="Etykieta (np. Repo GitHub)" value={linkForm.label} onChange={(e) => setLinkForm((p) => ({ ...p, label: e.target.value }))} />
+                <Input placeholder="URL" value={linkForm.url} onChange={(e) => setLinkForm((p) => ({ ...p, url: e.target.value }))} />
+                <select
+                  className="h-10 rounded-xl border border-white/30 bg-white/70 px-3 text-xs dark:border-white/10 dark:bg-white/5"
+                  value={linkForm.type}
+                  onChange={(e) => setLinkForm((p) => ({ ...p, type: e.target.value }))}
+                >
+                  <option value="github">github</option>
+                  <option value="google_drive">google_drive</option>
+                  <option value="documentation">documentation</option>
+                  <option value="other">other</option>
+                </select>
+                <Button disabled={!linkForm.label || !linkForm.url} onClick={() => createLinkMutation.mutate()}>
+                  Dodaj link
+                </Button>
+              </div>
+            ) : null}
+            <div className="space-y-2 text-sm">
+              {links.map((link) => (
+                <article key={link.id} className="rounded-xl bg-white/60 p-3 dark:bg-white/5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="font-semibold">{link.label}</p>
+                      <p className="text-xs text-muted">{link.type}</p>
+                    </div>
+                    <a className="text-xs text-accent underline" href={link.url} target="_blank" rel="noreferrer">
+                      Otworz
+                    </a>
+                  </div>
+                  {canManageProject ? (
+                    <div className="mt-2 flex gap-2">
+                      <Button variant="secondary" onClick={() => setEditingLinkId(editingLinkId === link.id ? null : link.id)}>
+                        {editingLinkId === link.id ? "Zamknij edycje" : "Edytuj"}
+                      </Button>
+                      <Button variant="ghost" onClick={() => deleteLinkMutation.mutate(link.id)}>
+                        Usun
+                      </Button>
+                    </div>
+                  ) : null}
+                  {canManageProject && editingLinkId === link.id ? (
+                    <div className="mt-2 grid gap-2">
+                      <Input defaultValue={link.label} onBlur={(e) => updateLinkMutation.mutate({ linkId: link.id, payload: { label: e.target.value } })} />
+                      <Input defaultValue={link.url} onBlur={(e) => updateLinkMutation.mutate({ linkId: link.id, payload: { url: e.target.value } })} />
+                    </div>
+                  ) : null}
+                </article>
+              ))}
+              {links.length === 0 ? <p className="text-xs text-muted">Brak linkow projektu.</p> : null}
             </div>
           </SectionCard>
           <SectionCard title="Archiwum">

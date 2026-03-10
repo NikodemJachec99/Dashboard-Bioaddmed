@@ -182,6 +182,21 @@ class ProjectViewSet(viewsets.ModelViewSet):
         serializer.save(project=project)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=["patch", "delete"], url_path=r"links/(?P<link_id>\d+)")
+    def link_detail(self, request, pk=None, link_id=None):
+        project = self.get_object()
+        denied = self._ensure_manage_access(request, project)
+        if denied:
+            return denied
+        link = get_object_or_404(ProjectLink, pk=link_id, project_id=pk)
+        if request.method == "PATCH":
+            serializer = ProjectLinkSerializer(link, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
+        link.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     @action(detail=True, methods=["get", "post"], url_path="milestones")
     def milestones(self, request, pk=None):
         project = self.get_object()

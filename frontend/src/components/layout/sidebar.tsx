@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 
+import { useAuth } from "@/app/providers/auth-provider";
 import {
   Bell,
   BookOpen,
@@ -14,20 +15,24 @@ import {
 } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 
-const items = [
+const baseItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/projects", label: "Projekty", icon: FolderKanban },
   { to: "/calendar", label: "Kalendarz", icon: Calendar },
-  { to: "/polls", label: "Głosowania", icon: RadioTower },
-  { to: "/members", label: "Członkowie", icon: Users },
+  { to: "/polls", label: "Glosowania", icon: RadioTower },
+  { to: "/members", label: "Czlonkowie", icon: Users },
   { to: "/knowledge", label: "Baza wiedzy", icon: BookOpen },
-  { to: "/announcements", label: "Ogłoszenia", icon: Bell },
+  { to: "/announcements", label: "Ogloszenia", icon: Bell },
   { to: "/reports", label: "Raporty", icon: ScrollText },
   { to: "/resources", label: "Zasoby", icon: Trophy },
-  { to: "/admin", label: "Admin", icon: Settings2 },
 ];
 
+const adminItem = { to: "/admin", label: "Admin", icon: Settings2 };
+
 export function Sidebar() {
+  const { user } = useAuth();
+  const items = [...baseItems, ...(user?.global_role === "admin" ? [adminItem] : [])];
+
   return (
     <aside className="glass-panel hairline hidden w-[290px] shrink-0 flex-col p-4 lg:flex">
       <div className="mb-8 flex items-center gap-3 px-2 pt-2">

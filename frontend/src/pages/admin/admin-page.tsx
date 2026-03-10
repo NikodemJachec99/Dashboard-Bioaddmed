@@ -1,13 +1,16 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { ApiError } from "@/api/client";
 import {
   addProjectMember,
   createProject,
   createUser,
+  deleteUser,
   fetchProjects,
   fetchUsers,
   queryKeys,
+  updateUser,
   type AddProjectMemberPayload,
   type CreateProjectPayload,
   type CreateUserPayload,
@@ -45,11 +48,18 @@ function getProjectTone(status: string) {
   return "default";
 }
 
+function toErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError) return error.message || fallback;
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
+
 export function AdminPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [searchMembers, setSearchMembers] = useState("");
 
   const [userForm, setUserForm] = useState<CreateUserPayload>({
     email: "",
@@ -71,7 +81,11 @@ export function AdminPage() {
     progress_percent: 0,
   });
 
-  const [assignmentForm, setAssignmentForm] = useState<{ projectId: number | ""; userId: number | ""; project_role: AddProjectMemberPayload["project_role"] }>({
+  const [assignmentForm, setAssignmentForm] = useState<{
+    projectId: number | "";
+    userId: number | "";
+    project_role: AddProjectMemberPayload["project_role"];
+  }>({
     projectId: "",
     userId: "",
     project_role: "member",
@@ -85,11 +99,21 @@ export function AdminPage() {
     [users],
   );
 
+  const filteredUsers = useMemo(
+    () =>
+      sortedUsers.filter((entry) => {
+        const phrase = searchMembers.toLowerCase().trim();
+        if (!phrase) return true;
+        return `${entry.first_name} ${entry.last_name} ${entry.email}`.toLowerCase().includes(phrase);
+      }),
+    [searchMembers, sortedUsers],
+  );
+
   const createUserMutation = useMutation({
     mutationFn: createUser,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.users });
-      setFeedback("Użytkownik został dodany.");
+      setFeedback("Uzytkownik dodany.");
       setError(null);
       setUserForm({
         email: "",
@@ -101,8 +125,8 @@ export function AdminPage() {
         is_active_member: true,
       });
     },
-    onError: (mutationError: unknown) => {
-      setError(mutationError instanceof Error ? mutationError.message : "Nie udało się dodać użytkownika.");
+    onError: (mutationError) => {
+      setError(toErrorMessage(mutationError, "Nie udalo sie dodac uzytkownika."));
       setFeedback(null);
     },
   });
@@ -111,7 +135,7 @@ export function AdminPage() {
     mutationFn: createProject,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.projects });
-      setFeedback("Projekt został utworzony.");
+      setFeedback("Projekt utworzony.");
       setError(null);
       setProjectForm({
         name: "",
@@ -123,8 +147,8 @@ export function AdminPage() {
         progress_percent: 0,
       });
     },
-    onError: (mutationError: unknown) => {
-      setError(mutationError instanceof Error ? mutationError.message : "Nie udało się utworzyć projektu.");
+    onError: (mutationError) => {
+      setError(toErrorMessage(mutationError, "Nie udalo sie utworzyc projektu."));
       setFeedback(null);
     },
   });
@@ -133,29 +157,46 @@ export function AdminPage() {
     mutationFn: ({ projectId, payload }: { projectId: number; payload: AddProjectMemberPayload }) => addProjectMember(projectId, payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.projects });
-      setFeedback("Użytkownik został przypisany do projektu.");
+      setFeedback("Uzytkownik przypisany do projektu.");
       setError(null);
       setAssignmentForm({ projectId: "", userId: "", project_role: "member" });
     },
-    onError: (mutationError: unknown) => {
-      setError(mutationError instanceof Error ? mutationError.message : "Nie udało się przypisać użytkownika.");
+    onError: (mutationError) => {
+      setError(toErrorMessage(mutationError, "Nie udalo sie przypisac uzytkownika."));
       setFeedback(null);
     },
   });
 
+  const updateUserMutation = useMutation({
+    mutationFn: ({ userId, payload }: { userId: number; payload: Record<string, unknown> }) => updateUser(userId, payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.users });
+      setFeedback("Dane czlonka zaktualizowane.");
+      setError(null);
+    },
+    onError: (mutationError) => setError(toErrorMessage(mutationError, "Nie udalo sie zaktualizowac uzytkownika.")),
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: deleteUser,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.users });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.projects });
+      setFeedback("Uzytkownik usuniety.");
+      setError(null);
+    },
+    onError: (mutationError) => setError(toErrorMessage(mutationError, "Nie udalo sie usunac uzytkownika.")),
+  });
+
   return (
     <>
-      <PageHeader
-        eyebrow="Admin"
-        title="Panel administracyjny"
-        description="Tworzenie użytkowników, projektów i przypisań projektowych bezpośrednio z aplikacji."
-      />
+      <PageHeader eyebrow="Admin" title="Panel administracyjny" description="Pelne zarzadzanie czlonkami, projektami i przypisaniami." />
 
-      {feedback ? <div className="rounded-2xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-600">{feedback}</div> : null}
-      {error ? <div className="rounded-2xl bg-rose-500/10 px-4 py-3 text-sm text-rose-600">{error}</div> : null}
+      {feedback ? <div className="rounded-2xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700">{feedback}</div> : null}
+      {error ? <div className="rounded-2xl bg-rose-500/10 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <SectionCard title="Dodaj użytkownika">
+        <SectionCard title="Dodaj uzytkownika">
           <form
             className="space-y-3"
             onSubmit={(event) => {
@@ -163,29 +204,14 @@ export function AdminPage() {
               createUserMutation.mutate(userForm);
             }}
           >
-            <Input
-              placeholder="Email"
-              value={userForm.email}
-              onChange={(event) => setUserForm((prev) => ({ ...prev, email: event.target.value }))}
-              required
-            />
+            <Input placeholder="Email" value={userForm.email} onChange={(event) => setUserForm((prev) => ({ ...prev, email: event.target.value }))} required />
             <div className="grid gap-3 md:grid-cols-2">
-              <Input
-                placeholder="Imię"
-                value={userForm.first_name}
-                onChange={(event) => setUserForm((prev) => ({ ...prev, first_name: event.target.value }))}
-                required
-              />
-              <Input
-                placeholder="Nazwisko"
-                value={userForm.last_name}
-                onChange={(event) => setUserForm((prev) => ({ ...prev, last_name: event.target.value }))}
-                required
-              />
+              <Input placeholder="Imie" value={userForm.first_name} onChange={(event) => setUserForm((prev) => ({ ...prev, first_name: event.target.value }))} required />
+              <Input placeholder="Nazwisko" value={userForm.last_name} onChange={(event) => setUserForm((prev) => ({ ...prev, last_name: event.target.value }))} required />
             </div>
             <Input
               type="password"
-              placeholder="Hasło (min. 8 znaków)"
+              placeholder="Haslo (min. 8 znakow)"
               value={userForm.password}
               onChange={(event) => setUserForm((prev) => ({ ...prev, password: event.target.value }))}
               minLength={8}
@@ -197,17 +223,17 @@ export function AdminPage() {
                 value={userForm.global_role}
                 onChange={(event) => setUserForm((prev) => ({ ...prev, global_role: event.target.value as CreateUserPayload["global_role"] }))}
               >
-                <option value="member">Member</option>
-                <option value="admin">Admin</option>
+                <option value="member">member</option>
+                <option value="admin">admin</option>
               </select>
               <Button type="submit" className="h-12" disabled={createUserMutation.isPending}>
-                {createUserMutation.isPending ? "Dodawanie..." : "Dodaj użytkownika"}
+                {createUserMutation.isPending ? "Dodawanie..." : "Dodaj uzytkownika"}
               </Button>
             </div>
           </form>
         </SectionCard>
 
-        <SectionCard title="Utwórz projekt">
+        <SectionCard title="Utworz projekt">
           <form
             className="space-y-3"
             onSubmit={(event) => {
@@ -221,23 +247,14 @@ export function AdminPage() {
               onChange={(event) =>
                 setProjectForm((prev) => {
                   const name = event.target.value;
-                  return {
-                    ...prev,
-                    name,
-                    slug: prev.slug ? prev.slug : toSlug(name),
-                  };
+                  return { ...prev, name, slug: prev.slug ? prev.slug : toSlug(name) };
                 })
               }
               required
             />
+            <Input placeholder="Slug" value={projectForm.slug} onChange={(event) => setProjectForm((prev) => ({ ...prev, slug: toSlug(event.target.value) }))} required />
             <Input
-              placeholder="Slug"
-              value={projectForm.slug}
-              onChange={(event) => setProjectForm((prev) => ({ ...prev, slug: toSlug(event.target.value) }))}
-              required
-            />
-            <Input
-              placeholder="Krótki opis"
+              placeholder="Krotki opis"
               value={projectForm.short_description}
               onChange={(event) => setProjectForm((prev) => ({ ...prev, short_description: event.target.value }))}
               required
@@ -255,7 +272,7 @@ export function AdminPage() {
                 ))}
               </select>
               <Button type="submit" className="h-12" disabled={createProjectMutation.isPending}>
-                {createProjectMutation.isPending ? "Tworzenie..." : "Utwórz projekt"}
+                {createProjectMutation.isPending ? "Tworzenie..." : "Utworz projekt"}
               </Button>
             </div>
           </form>
@@ -263,13 +280,13 @@ export function AdminPage() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.05fr_.95fr]">
-        <SectionCard title="Przypisz użytkownika do projektu">
+        <SectionCard title="Przypisz uzytkownika do projektu">
           <form
             className="space-y-3"
             onSubmit={(event) => {
               event.preventDefault();
               if (!assignmentForm.projectId || !assignmentForm.userId) {
-                setError("Wybierz projekt i użytkownika.");
+                setError("Wybierz projekt i uzytkownika.");
                 setFeedback(null);
                 return;
               }
@@ -302,7 +319,7 @@ export function AdminPage() {
               onChange={(event) => setAssignmentForm((prev) => ({ ...prev, userId: Number(event.target.value) || "" }))}
               required
             >
-              <option value="">Wybierz użytkownika</option>
+              <option value="">Wybierz uzytkownika</option>
               {sortedUsers.map((entry) => (
                 <option key={entry.id} value={entry.id}>
                   {entry.first_name} {entry.last_name} ({entry.email})
@@ -313,12 +330,10 @@ export function AdminPage() {
               <select
                 className="h-12 rounded-2xl border border-white/30 bg-white/70 px-4 text-sm dark:border-white/10 dark:bg-white/5"
                 value={assignmentForm.project_role}
-                onChange={(event) =>
-                  setAssignmentForm((prev) => ({ ...prev, project_role: event.target.value as AddProjectMemberPayload["project_role"] }))
-                }
+                onChange={(event) => setAssignmentForm((prev) => ({ ...prev, project_role: event.target.value as AddProjectMemberPayload["project_role"] }))}
               >
-                <option value="member">Member</option>
-                <option value="coordinator">Coordinator</option>
+                <option value="member">member</option>
+                <option value="coordinator">coordinator</option>
               </select>
               <Button type="submit" className="h-12" disabled={assignUserMutation.isPending}>
                 {assignUserMutation.isPending ? "Zapisywanie..." : "Dodaj do projektu"}
@@ -327,7 +342,7 @@ export function AdminPage() {
           </form>
         </SectionCard>
 
-        <SectionCard title="Status projektów" description={`Operator: ${user?.first_name ?? ""} ${user?.last_name ?? ""}`.trim()}>
+        <SectionCard title="Status projektow" description={`Operator: ${user?.first_name ?? ""} ${user?.last_name ?? ""}`.trim()}>
           <div className="space-y-3">
             {projects.map((project) => (
               <article key={project.id} className="rounded-[20px] bg-white/60 p-4 text-sm dark:bg-white/5">
@@ -335,6 +350,9 @@ export function AdminPage() {
                   <div>
                     <p className="font-semibold">{project.name}</p>
                     <p className="text-muted">{project.short_description}</p>
+                    <p className="mt-1 text-xs text-muted">
+                      Etap: {project.stage} | Progress: {project.progress_percent}%
+                    </p>
                   </div>
                   <Badge tone={getProjectTone(project.status)}>{project.status}</Badge>
                 </div>
@@ -343,6 +361,66 @@ export function AdminPage() {
           </div>
         </SectionCard>
       </div>
+
+      <SectionCard title="Zarzadzanie czlonkami">
+        <div className="mb-3">
+          <Input placeholder="Szukaj po imieniu, nazwisku lub emailu" value={searchMembers} onChange={(event) => setSearchMembers(event.target.value)} />
+        </div>
+        <div className="space-y-3">
+          {filteredUsers.map((entry) => (
+            <article key={entry.id} className="rounded-[20px] bg-white/60 p-4 text-sm dark:bg-white/5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="font-semibold">
+                    {entry.first_name} {entry.last_name}
+                  </p>
+                  <p className="text-muted">{entry.email}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    className="h-9 rounded-xl border border-white/30 bg-white/70 px-3 text-xs dark:border-white/10 dark:bg-white/5"
+                    value={entry.global_role}
+                    onChange={(event) =>
+                      updateUserMutation.mutate({ userId: entry.id, payload: { global_role: event.target.value } })
+                    }
+                    disabled={updateUserMutation.isPending}
+                  >
+                    <option value="member">member</option>
+                    <option value="admin">admin</option>
+                  </select>
+                  <label className="flex items-center gap-1 text-xs text-muted">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(entry.is_active)}
+                      onChange={(event) =>
+                        updateUserMutation.mutate({ userId: entry.id, payload: { is_active: event.target.checked } })
+                      }
+                    />
+                    aktywny
+                  </label>
+                  <label className="flex items-center gap-1 text-xs text-muted">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(entry.is_active_member)}
+                      onChange={(event) =>
+                        updateUserMutation.mutate({ userId: entry.id, payload: { is_active_member: event.target.checked } })
+                      }
+                    />
+                    czlonek
+                  </label>
+                  <Button
+                    variant="ghost"
+                    disabled={entry.id === user?.id || deleteUserMutation.isPending}
+                    onClick={() => deleteUserMutation.mutate(entry.id)}
+                  >
+                    Usun
+                  </Button>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      </SectionCard>
     </>
   );
 }
