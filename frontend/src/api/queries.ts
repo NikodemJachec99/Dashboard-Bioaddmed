@@ -508,6 +508,17 @@ export async function createAnnouncement(payload: CreateAnnouncementPayload) {
   });
 }
 
+export async function updateAnnouncement(announcementId: number, payload: Partial<CreateAnnouncementPayload>) {
+  return api<Announcement>(`/announcements/${announcementId}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteAnnouncement(announcementId: number) {
+  return api<void>(`/announcements/${announcementId}/`, { method: "DELETE" });
+}
+
 export async function createResource(payload: CreateResourcePayload) {
   return api<Resource>("/resources/", {
     method: "POST",
