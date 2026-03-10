@@ -262,6 +262,18 @@ export async function fetchNotifications(): Promise<Notification[]> {
   return unwrapList(await api<Notification[] | Paginated<Notification>>("/notifications/"));
 }
 
+export async function markNotificationRead(notificationId: number) {
+  return api<Notification>(`/notifications/${notificationId}/read/`, { method: "POST" });
+}
+
+export async function markAllNotificationsRead() {
+  return api<{ marked: number }>("/notifications/mark-all-read/", { method: "POST" });
+}
+
+export async function fetchNotificationSummary() {
+  return api<{ unread: number; total: number; recent: Notification[] }>("/notifications/summary/");
+}
+
 export async function fetchUserPortfolio(userId: number): Promise<Achievement[]> {
   return api<Achievement[]>(`/users/${userId}/portfolio/`);
 }

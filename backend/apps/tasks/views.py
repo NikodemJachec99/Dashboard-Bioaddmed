@@ -44,6 +44,7 @@ class TaskViewSet(viewsets.ModelViewSet):
 
     def partial_update(self, request, *args, **kwargs):
         task = self.get_object()
+        previous_assignee_id = task.assignee_id
         is_coordinator = ProjectMembership.objects.filter(
             user=request.user,
             project=task.project,
@@ -61,7 +62,11 @@ class TaskViewSet(viewsets.ModelViewSet):
                     {"detail": "Możesz aktualizować tylko status i postęp własnego taska."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
-        return super().partial_update(request, *args, **kwargs)
+        response = super().partial_update(request, *args, **kwargs)
+        task.refresh_from_db()
+        if task.assignee_id and task.assignee_id != previous_assignee_id:
+            notify_task_assignment(task)
+        return response
 
     def destroy(self, request, *args, **kwargs):
         task = self.get_object()

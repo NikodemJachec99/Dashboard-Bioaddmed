@@ -270,7 +270,10 @@ export type Notification = {
   id: number;
   title: string;
   message: string;
+  channel?: string;
+  status?: string;
   is_read: boolean;
+  read_at?: string | null;
   created_at: string;
   url?: string;
 };
@@ -322,6 +325,10 @@ export type DashboardOverview = {
   upcoming_meetings: number;
   active_polls: number;
   announcements: number;
+  projects_needing_attention: number;
+  critical_projects: number;
+  unread_notifications: number;
+  portfolio_health_score: number;
 };
 
 export type DashboardMySummary = {
@@ -329,6 +336,8 @@ export type DashboardMySummary = {
   week_tasks: number;
   meetings: number;
   notifications: number;
+  overdue_tasks: number;
+  blockers: number;
 };
 
 export type DashboardAdminSummary = {
@@ -336,14 +345,28 @@ export type DashboardAdminSummary = {
   overdue_tasks: number;
   blocked_tasks: number;
   members_without_project: number;
+  critical_projects: number;
+  portfolio_health_score: number;
+  worst_health_score: number;
 };
 
 export type ProjectHealth = {
   id: number;
   name: string;
+  slug: string;
   status: string;
   stage: string;
   progress_percent: number;
   member_count: number;
   task_count: number;
+  overdue_tasks: number;
+  blocker_count: number;
+  open_risks: number;
+  overdue_milestones: number;
+  coordinators: number;
+  health_score: number;
+  health_label: string;
+  attention_level: "low" | "medium" | "high" | "critical";
+  recent_activity_days?: number | null;
+  last_activity_at?: string | null;
 };

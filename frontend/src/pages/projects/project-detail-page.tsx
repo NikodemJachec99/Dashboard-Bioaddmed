@@ -160,6 +160,11 @@ function formatFileSize(bytes?: number | null) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function isImageAttachment(attachment: FileAttachment) {
+  const target = `${attachment.file_name} ${attachment.file_url}`.toLowerCase();
+  return [".png", ".jpg", ".jpeg", ".webp", ".gif"].some((extension) => target.includes(extension));
+}
+
 function tabMeta(tab: ProjectTab) {
   if (tab === "overview") return { title: "Overview", description: "Executive summary, health i rytm projektu", icon: <Trophy size={16} /> };
   if (tab === "kanban") return { title: "Kanban", description: "Board delivery z task side rail", icon: <FolderKanban size={16} /> };
@@ -1426,6 +1431,11 @@ export function ProjectDetailPage() {
             <div className="mb-6 grid gap-4 md:grid-cols-2">
               {attachments.map((attachment) => (
                 <article key={attachment.id} className="tile-soft p-5">
+                  {isImageAttachment(attachment) ? (
+                    <div className="mb-4 overflow-hidden rounded-[22px] border border-white/20 bg-slate-100 dark:border-white/10 dark:bg-slate-900">
+                      <img src={attachment.file_url} alt={attachment.label} className="h-44 w-full object-cover" />
+                    </div>
+                  ) : null}
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <Badge tone="success">file</Badge>
@@ -1848,6 +1858,11 @@ export function ProjectDetailPage() {
                   <div className="mt-4 space-y-3">
                     {taskAttachments.map((attachment: FileAttachment) => (
                       <div key={attachment.id} className="rounded-[20px] bg-white/80 px-4 py-4 dark:bg-white/5">
+                        {isImageAttachment(attachment) ? (
+                          <div className="mb-3 overflow-hidden rounded-[18px] border border-white/20 bg-slate-100 dark:border-white/10 dark:bg-slate-900">
+                            <img src={attachment.file_url} alt={attachment.label} className="h-36 w-full object-cover" />
+                          </div>
+                        ) : null}
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <p className="font-medium">{attachment.label}</p>

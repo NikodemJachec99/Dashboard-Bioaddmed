@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from apps.audit.services import log_activity
 from apps.meetings.models import Meeting, MeetingActionItem, MeetingParticipant
 from apps.meetings.serializers import MeetingActionItemSerializer, MeetingParticipantSerializer, MeetingSerializer
+from apps.notifications.services import create_in_app_notification
 from apps.meetings.services import generate_tasks_from_action_items
 from apps.projects.permissions import is_project_coordinator, is_project_coordinator_by_id, is_project_member_by_id
 
@@ -82,8 +83,14 @@ class MeetingViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Brak uprawnień."}, status=status.HTTP_403_FORBIDDEN)
         serializer = MeetingParticipantSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(meeting=meeting)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        participant = serializer.save(meeting=meeting)
+        create_in_app_notification(
+            user=participant.user,
+            title="Zaproszenie na spotkanie",
+            message=f"Zostales dodany do spotkania '{meeting.title}'.",
+            url="/calendar",
+        )
+        return Response(MeetingParticipantSerializer(participant).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"], url_path="attendance")
     def attendance(self, request, pk=None):

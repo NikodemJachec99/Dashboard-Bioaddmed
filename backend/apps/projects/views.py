@@ -11,6 +11,7 @@ from apps.audit.models import ActivityLog
 from apps.audit.services import log_activity
 from apps.core.models import FileAttachment
 from apps.core.serializers import FileAttachmentSerializer
+from apps.notifications.services import create_in_app_notification
 from apps.projects.models import (
     Project,
     ProjectLink,
@@ -174,8 +175,14 @@ class ProjectViewSet(viewsets.ModelViewSet):
             return denied
         serializer = ProjectMembershipSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(project=project)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        membership = serializer.save(project=project)
+        create_in_app_notification(
+            user=membership.user,
+            title="Dolaczono Cie do projektu",
+            message=f"Zostales dodany do projektu '{project.name}' jako {membership.project_role}.",
+            url=f"/projects/{project.slug}",
+        )
+        return Response(ProjectMembershipSerializer(membership).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["patch", "delete"], url_path=r"members/(?P<membership_id>\d+)")
     def member_detail(self, request, pk=None, membership_id=None):

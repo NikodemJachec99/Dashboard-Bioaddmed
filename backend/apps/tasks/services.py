@@ -2,7 +2,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.audit.services import log_activity
-from apps.notifications.models import Notification
+from apps.notifications.services import create_in_app_notification
 from apps.tasks.models import Task
 
 
@@ -37,10 +37,9 @@ def move_task(*, task: Task, column, order: int, user):
 
 def notify_task_assignment(task: Task):
     if task.assignee:
-        Notification.objects.create(
+        create_in_app_notification(
             user=task.assignee,
             title="Przypisano Ci zadanie",
-            message=f"Task '{task.title}' został przypisany do Ciebie.",
+            message=f"Task '{task.title}' zostal przypisany do Ciebie.",
             url=f"/projects/{task.project.slug}",
         )
-

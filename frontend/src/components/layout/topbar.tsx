@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/app/providers/auth-provider";
 import { GlobalSearch } from "@/components/layout/global-search";
+import { NotificationCenter } from "@/components/layout/notification-center";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Button } from "@/components/ui/button";
 
@@ -14,6 +15,7 @@ export function Topbar() {
     <header className="tile-panel hairline sticky top-4 z-20 flex items-center justify-between gap-4 px-5 py-4">
       <GlobalSearch />
       <div className="flex items-center gap-3">
+        <NotificationCenter />
         <ThemeToggle />
         <Button
           variant="ghost"
