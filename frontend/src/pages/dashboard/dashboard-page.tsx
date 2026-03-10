@@ -7,6 +7,7 @@ import {
   fetchDashboardMySummary,
   fetchDashboardOverview,
   fetchMeetings,
+  fetchNotifications,
   fetchPolls,
   fetchProjectHealth,
   queryKeys,
@@ -17,6 +18,14 @@ import { SectionCard } from "@/components/common/section-card";
 import { StatCard } from "@/components/common/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Bell, Calendar, FolderKanban, RadioTower, Users } from "@/components/ui/icons";
+
+type TimelineEntry = {
+  id: string;
+  title: string;
+  detail: string;
+  date: string;
+  kind: "notification" | "meeting" | "poll" | "announcement";
+};
 
 function statusTone(status: string) {
   if (status === "at_risk") return "warning";
@@ -40,6 +49,13 @@ function healthScore(status: string, progressPercent: number) {
   return Math.min(95, Math.max(48, progressPercent + 18));
 }
 
+function timelineTone(kind: TimelineEntry["kind"]) {
+  if (kind === "poll") return "warning";
+  if (kind === "meeting") return "success";
+  if (kind === "notification") return "danger";
+  return "default";
+}
+
 export function DashboardPage() {
   const { user } = useAuth();
   const { data: overview } = useQuery({ queryKey: queryKeys.dashboardOverview, queryFn: fetchDashboardOverview });
@@ -53,6 +69,7 @@ export function DashboardPage() {
   const { data: meetings = [] } = useQuery({ queryKey: queryKeys.meetings, queryFn: fetchMeetings });
   const { data: polls = [] } = useQuery({ queryKey: queryKeys.polls, queryFn: fetchPolls });
   const { data: announcements = [] } = useQuery({ queryKey: queryKeys.announcements, queryFn: fetchAnnouncements });
+  const { data: notifications = [] } = useQuery({ queryKey: queryKeys.notifications, queryFn: fetchNotifications });
 
   const riskyProjects = useMemo(
     () => projects.filter((project) => project.status === "at_risk" || project.status === "blocked"),
@@ -77,6 +94,43 @@ export function DashboardPage() {
     () => [...announcements].sort((left, right) => Number(right.is_pinned) - Number(left.is_pinned)).slice(0, 3),
     [announcements],
   );
+  const timeline = useMemo(() => {
+    const notificationEntries: TimelineEntry[] = notifications.map((item) => ({
+      id: `notification-${item.id}`,
+      title: item.title,
+      detail: item.message,
+      date: item.created_at,
+      kind: "notification",
+    }));
+
+    const meetingEntries: TimelineEntry[] = meetings.map((meeting) => ({
+      id: `meeting-${meeting.id}`,
+      title: meeting.title,
+      detail: `${meeting.meeting_type} • ${meeting.location ?? meeting.online_url ?? "bez lokalizacji"}`,
+      date: meeting.start_at,
+      kind: "meeting",
+    }));
+
+    const pollEntries: TimelineEntry[] = activePolls.map((poll) => ({
+      id: `poll-${poll.id}`,
+      title: poll.title,
+      detail: `${poll.audience_type} • deadline ${new Date(poll.ends_at).toLocaleString("pl-PL")}`,
+      date: poll.ends_at,
+      kind: "poll",
+    }));
+
+    const announcementEntries: TimelineEntry[] = spotlightAnnouncements.map((item) => ({
+      id: `announcement-${item.id}`,
+      title: item.title,
+      detail: item.content,
+      date: item.start_at,
+      kind: "announcement",
+    }));
+
+    return [...notificationEntries, ...meetingEntries, ...pollEntries, ...announcementEntries]
+      .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
+      .slice(0, 8);
+  }, [activePolls, meetings, notifications, spotlightAnnouncements]);
 
   return (
     <>
@@ -346,6 +400,35 @@ export function DashboardPage() {
           </SectionCard>
         </div>
       </div>
+
+      <SectionCard title="Timeline aktywnosci" description="Jedno miejsce, w ktorym widac ruch systemu: spotkania, decyzje, komunikaty i powiadomienia.">
+        <div className="grid gap-4 lg:grid-cols-[0.7fr_1.3fr]">
+          <div className="tile-soft p-5">
+            <p className="text-xs uppercase tracking-[0.18em] text-muted">Pulse check</p>
+            <h3 className="mt-3 text-2xl font-bold tracking-[-0.03em]">
+              {timeline.length > 0 ? "Ruch w systemie jest czytelny i sekwencyjny" : "Brak aktywnosci do pokazania"}
+            </h3>
+            <p className="mt-3 text-sm leading-6 text-muted">
+              Timeline laczy kilka domen, zeby dashboard przestal byc tylko zbiorem statycznych kart. To ma byc ekran zyjacej operacji.
+            </p>
+          </div>
+          <div className="space-y-4">
+            {timeline.map((entry) => (
+              <article key={entry.id} className="tile-soft flex items-start gap-4 p-4">
+                <div className="mt-1 h-3 w-3 shrink-0 rounded-full bg-accent shadow-[0_0_0_6px_rgba(14,165,233,0.12)]" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold">{entry.title}</p>
+                    <Badge tone={timelineTone(entry.kind)}>{entry.kind}</Badge>
+                  </div>
+                  <p className="mt-1 text-sm text-muted">{entry.detail}</p>
+                </div>
+                <p className="text-xs text-muted">{new Date(entry.date).toLocaleString("pl-PL")}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </SectionCard>
     </>
   );
 }
