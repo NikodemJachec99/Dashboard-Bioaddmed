@@ -1,6 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { fetchAnnouncements, fetchMeetings, fetchPolls, fetchProjects, queryKeys } from "@/api/queries";
+import {
+  fetchAnnouncements,
+  fetchDashboardAdminSummary,
+  fetchDashboardMySummary,
+  fetchDashboardOverview,
+  fetchMeetings,
+  fetchPolls,
+  fetchProjectHealth,
+  queryKeys,
+} from "@/api/queries";
+import { useAuth } from "@/app/providers/auth-provider";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { StatCard } from "@/components/common/stat-card";
@@ -14,7 +24,15 @@ function statusTone(status: string) {
 }
 
 export function DashboardPage() {
-  const { data: projects = [] } = useQuery({ queryKey: queryKeys.projects, queryFn: fetchProjects });
+  const { user } = useAuth();
+  const { data: overview } = useQuery({ queryKey: queryKeys.dashboardOverview, queryFn: fetchDashboardOverview });
+  const { data: mySummary } = useQuery({ queryKey: queryKeys.dashboardMySummary, queryFn: fetchDashboardMySummary });
+  const { data: adminSummary } = useQuery({
+    queryKey: queryKeys.dashboardAdminSummary,
+    queryFn: fetchDashboardAdminSummary,
+    enabled: user?.global_role === "admin",
+  });
+  const { data: projects = [] } = useQuery({ queryKey: queryKeys.dashboardProjectHealth, queryFn: fetchProjectHealth });
   const { data: meetings = [] } = useQuery({ queryKey: queryKeys.meetings, queryFn: fetchMeetings });
   const { data: polls = [] } = useQuery({ queryKey: queryKeys.polls, queryFn: fetchPolls });
   const { data: announcements = [] } = useQuery({ queryKey: queryKeys.announcements, queryFn: fetchAnnouncements });
@@ -28,10 +46,10 @@ export function DashboardPage() {
         description="Pełny status projektów, aktywności i sygnałów ryzyka dostępny dla całego zespołu."
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Aktywne projekty" value={projects.length} delta="+2" />
+        <StatCard label="Aktywne projekty" value={overview?.active_projects ?? projects.length} delta={user?.global_role === "admin" ? undefined : "Mój widok"} />
         <StatCard label="Ryzyko / blokery" value={riskyProjects.length} />
-        <StatCard label="Najbliższe spotkania" value={meetings.length} />
-        <StatCard label="Aktywne głosowania" value={polls.length} />
+        <StatCard label="Najbliższe spotkania" value={overview?.upcoming_meetings ?? meetings.length} />
+        <StatCard label="Aktywne głosowania" value={overview?.active_polls ?? polls.length} />
       </div>
       <div className="grid gap-6 xl:grid-cols-[1.2fr_.8fr]">
         <SectionCard title="Status wszystkich projektów" description="Każdy użytkownik widzi etap, status i postęp wszystkich projektów.">
@@ -41,7 +59,7 @@ export function DashboardPage() {
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <h3 className="text-lg font-semibold">{project.name}</h3>
-                    <p className="mt-2 text-sm text-muted">{project.short_description}</p>
+                    <p className="mt-2 text-sm text-muted">Członkowie: {project.member_count} • Taski: {project.task_count}</p>
                     <div className="mt-3 flex items-center gap-2">
                       <Badge tone={statusTone(project.status)}>{project.status}</Badge>
                       <Badge>{project.stage}</Badge>
@@ -59,6 +77,23 @@ export function DashboardPage() {
           </div>
         </SectionCard>
         <div className="space-y-6">
+          <SectionCard title="Mój skrót">
+            <div className="space-y-2 text-sm text-muted">
+              <p>Zadania dziś: {mySummary?.today_tasks ?? 0}</p>
+              <p>Zadania aktywne: {mySummary?.week_tasks ?? 0}</p>
+              <p>Powiadomienia: {mySummary?.notifications ?? 0}</p>
+            </div>
+          </SectionCard>
+          {user?.global_role === "admin" ? (
+            <SectionCard title="Admin summary">
+              <div className="space-y-2 text-sm text-muted">
+                <p>Projekty zagrożone: {adminSummary?.projects_at_risk ?? 0}</p>
+                <p>Taski po terminie: {adminSummary?.overdue_tasks ?? 0}</p>
+                <p>Taski zablokowane: {adminSummary?.blocked_tasks ?? 0}</p>
+                <p>Członkowie bez projektu: {adminSummary?.members_without_project ?? 0}</p>
+              </div>
+            </SectionCard>
+          ) : null}
           <SectionCard title="Nadchodzące spotkania">
             <div className="space-y-3">
               {meetings.map((meeting) => (

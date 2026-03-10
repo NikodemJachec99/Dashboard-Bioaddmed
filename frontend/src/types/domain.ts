@@ -38,13 +38,23 @@ export type ProjectMembership = {
 
 export type Task = {
   id: number;
+  project?: number;
+  column?: number | null;
   title: string;
   description: string;
   status: string;
   priority: string;
+  assignee?: number | null;
   due_date?: string;
+  order?: number;
+  actual_hours?: string | number | null;
+  estimated_hours?: string | number | null;
+  created_by?: number | null;
+  completed_at?: string | null;
   assignee_email?: string;
   is_blocker?: boolean;
+  comments?: TaskComment[];
+  checklist_items?: TaskChecklistItem[];
 };
 
 export type KanbanColumn = {
@@ -53,6 +63,28 @@ export type KanbanColumn = {
   order: number;
   color: string;
   tasks: Task[];
+};
+
+export type KanbanBoard = {
+  id: number;
+  name: string;
+  project: number;
+  columns: KanbanColumn[];
+};
+
+export type TaskComment = {
+  id: number;
+  author?: number | null;
+  author_email?: string;
+  content: string;
+  created_at: string;
+};
+
+export type TaskChecklistItem = {
+  id: number;
+  content: string;
+  is_done: boolean;
+  order: number;
 };
 
 export type Project = {
@@ -73,16 +105,40 @@ export type Project = {
   tasks?: Task[];
 };
 
+export type MeetingParticipant = {
+  id: number;
+  user: number;
+  user_email: string;
+  attendance_status: string;
+  presence_confirmed_at?: string | null;
+};
+
+export type MeetingActionItem = {
+  id: number;
+  task?: number | null;
+  description: string;
+  assignee?: number | null;
+  assignee_email?: string;
+  due_date?: string | null;
+  created_at: string;
+};
+
 export type Meeting = {
   id: number;
   title: string;
   description: string;
   meeting_type: string;
+  related_project?: number | null;
+  organizer?: number | null;
   start_at: string;
   end_at: string;
   location?: string;
   online_url?: string;
+  agenda?: string;
+  notes?: string;
   status: string;
+  participants?: MeetingParticipant[];
+  action_items?: MeetingActionItem[];
 };
 
 export type VoteOption = {
@@ -99,6 +155,10 @@ export type VotePoll = {
   poll_type: string;
   audience_type: string;
   visibility_type: string;
+  related_project?: number | null;
+  eligible_users?: number[];
+  quorum_required?: number;
+  threshold_type?: string;
   status: string;
   starts_at: string;
   ends_at: string;
@@ -110,8 +170,13 @@ export type KnowledgeArticle = {
   title: string;
   slug: string;
   category: string;
+  visibility?: string;
+  related_project?: number | null;
   content: string;
   is_pinned: boolean;
+  version?: number;
+  author_email?: string;
+  created_at?: string;
   updated_at: string;
 };
 
@@ -137,6 +202,7 @@ export type Notification = {
 export type Reservation = {
   id: number;
   resource: number;
+  reserved_by?: number;
   reserved_by_email: string;
   start_at: string;
   end_at: string;
@@ -149,6 +215,8 @@ export type Resource = {
   title: string;
   description: string;
   location: string;
+  caretaker?: number | null;
+  caretaker_email?: string;
   rules: string;
   is_active: boolean;
 };
@@ -164,6 +232,42 @@ export type Achievement = {
 export type ReportSnapshot = {
   id: number;
   report_type: string;
+  generated_by?: number | null;
+  generated_by_email?: string;
+  parameters_json?: Record<string, unknown>;
   file_path: string;
   created_at: string;
+};
+
+export type DashboardOverview = {
+  active_projects: number;
+  members: number;
+  my_tasks: number;
+  upcoming_meetings: number;
+  active_polls: number;
+  announcements: number;
+};
+
+export type DashboardMySummary = {
+  today_tasks: number;
+  week_tasks: number;
+  meetings: number;
+  notifications: number;
+};
+
+export type DashboardAdminSummary = {
+  projects_at_risk: number;
+  overdue_tasks: number;
+  blocked_tasks: number;
+  members_without_project: number;
+};
+
+export type ProjectHealth = {
+  id: number;
+  name: string;
+  status: string;
+  stage: string;
+  progress_percent: number;
+  member_count: number;
+  task_count: number;
 };

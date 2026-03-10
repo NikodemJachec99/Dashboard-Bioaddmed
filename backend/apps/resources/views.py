@@ -24,6 +24,12 @@ class ReservationViewSet(viewsets.ModelViewSet):
     serializer_class = ReservationSerializer
     filterset_fields = ["resource", "status", "reserved_by"]
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if getattr(self.request.user, "global_role", None) == "admin":
+            return queryset
+        return queryset.filter(reserved_by=self.request.user)
+
     def get_permissions(self):
         if self.action in {"update", "partial_update", "destroy"}:
             return [IsAdminUserExtended()]

@@ -2,6 +2,8 @@ from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
+from rest_framework import serializers
 from rest_framework.response import Response
 
 from apps.accounts.models import User
@@ -14,6 +16,8 @@ from apps.voting.models import VotePoll
 
 
 class DashboardViewSet(viewsets.ViewSet):
+    serializer_class = serializers.Serializer
+
     @action(detail=False, methods=["get"], url_path="overview")
     def overview(self, request):
         today = timezone.now()
@@ -42,6 +46,8 @@ class DashboardViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=["get"], url_path="admin-summary")
     def admin_summary(self, request):
+        if getattr(request.user, "global_role", None) != "admin":
+            raise PermissionDenied("Brak uprawnień do podsumowania administracyjnego.")
         return Response(
             {
                 "projects_at_risk": Project.objects.filter(status=Project.Status.AT_RISK).count(),

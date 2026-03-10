@@ -11,6 +11,8 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = NotificationSerializer
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return Notification.objects.none()
         return Notification.objects.filter(user=self.request.user)
 
     @action(detail=True, methods=["post"], url_path="read")
@@ -20,4 +22,3 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         notification.read_at = timezone.now()
         notification.save(update_fields=["is_read", "read_at", "updated_at"])
         return Response(NotificationSerializer(notification).data, status=status.HTTP_200_OK)
-

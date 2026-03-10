@@ -14,7 +14,7 @@ from apps.projects.models import (
     ProjectRisk,
     RecruitmentOpening,
 )
-from apps.projects.permissions import is_project_coordinator
+from apps.projects.permissions import is_project_coordinator, is_project_member
 from apps.projects.serializers import (
     ProjectLinkSerializer,
     ProjectMembershipSerializer,
@@ -72,6 +72,11 @@ class ProjectViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Brak uprawnień."}, status=status.HTTP_403_FORBIDDEN)
         return None
 
+    def _ensure_member_access(self, request, project):
+        if not is_project_member(request.user, project):
+            return Response({"detail": "Brak dostępu do danych projektu."}, status=status.HTTP_403_FORBIDDEN)
+        return None
+
     @action(detail=True, methods=["get"], url_path="overview")
     def overview(self, request, pk=None):
         project = self.get_object()
@@ -94,6 +99,10 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"], url_path="activity")
     def activity(self, request, pk=None):
+        project = self.get_object()
+        denied = self._ensure_member_access(request, project)
+        if denied:
+            return denied
         logs = ActivityLog.objects.filter(entity_type="project", entity_id=str(pk))[:50]
         payload = [
             {
@@ -116,6 +125,10 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"], url_path="board")
     def board(self, request, pk=None):
+        project = self.get_object()
+        denied = self._ensure_member_access(request, project)
+        if denied:
+            return denied
         board = KanbanBoard.objects.filter(project_id=pk).first()
         if not board:
             return Response({"detail": "Board nie istnieje."}, status=status.HTTP_404_NOT_FOUND)
@@ -124,6 +137,9 @@ class ProjectViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get", "post"], url_path="members")
     def members(self, request, pk=None):
         project = self.get_object()
+        read_denied = self._ensure_member_access(request, project)
+        if read_denied and request.method == "GET":
+            return read_denied
         if request.method == "GET":
             return Response(ProjectMembershipSerializer(project.memberships.select_related("user"), many=True).data)
         denied = self._ensure_manage_access(request, project)
@@ -134,7 +150,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
         serializer.save(project=project)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=["patch", "delete"], url_path=r"members/(?P<membership_id>[^/.]+)")
+    @action(detail=True, methods=["patch", "delete"], url_path=r"members/(?P<membership_id>\d+)")
     def member_detail(self, request, pk=None, membership_id=None):
         project = self.get_object()
         denied = self._ensure_manage_access(request, project)
@@ -152,6 +168,9 @@ class ProjectViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get", "post"], url_path="links")
     def links(self, request, pk=None):
         project = self.get_object()
+        read_denied = self._ensure_member_access(request, project)
+        if read_denied and request.method == "GET":
+            return read_denied
         if request.method == "GET":
             return Response(ProjectLinkSerializer(project.links.all(), many=True).data)
         denied = self._ensure_manage_access(request, project)
@@ -165,6 +184,9 @@ class ProjectViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get", "post"], url_path="milestones")
     def milestones(self, request, pk=None):
         project = self.get_object()
+        read_denied = self._ensure_member_access(request, project)
+        if read_denied and request.method == "GET":
+            return read_denied
         if request.method == "GET":
             return Response(ProjectMilestoneSerializer(project.milestones.all(), many=True).data)
         denied = self._ensure_manage_access(request, project)
@@ -178,6 +200,9 @@ class ProjectViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get", "post"], url_path="risks")
     def risks(self, request, pk=None):
         project = self.get_object()
+        read_denied = self._ensure_member_access(request, project)
+        if read_denied and request.method == "GET":
+            return read_denied
         if request.method == "GET":
             return Response(ProjectRiskSerializer(project.risks.all(), many=True).data)
         denied = self._ensure_manage_access(request, project)
@@ -191,6 +216,9 @@ class ProjectViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get", "post"], url_path="tasks")
     def tasks(self, request, pk=None):
         project = self.get_object()
+        read_denied = self._ensure_member_access(request, project)
+        if read_denied and request.method == "GET":
+            return read_denied
         if request.method == "GET":
             queryset = Task.objects.filter(project=project).select_related("assignee", "column")
             return Response(TaskSerializer(queryset, many=True).data)
@@ -207,6 +235,9 @@ class ProjectViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get", "post"], url_path="recruitment")
     def recruitment(self, request, pk=None):
         project = self.get_object()
+        read_denied = self._ensure_member_access(request, project)
+        if read_denied and request.method == "GET":
+            return read_denied
         if request.method == "GET":
             return Response(RecruitmentOpeningSerializer(project.recruitment_openings.all(), many=True).data)
         denied = self._ensure_manage_access(request, project)
@@ -217,7 +248,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
         serializer.save(project=project)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=["post"], url_path=r"recruitment/(?P<opening_id>[^/.]+)/apply")
+    @action(detail=True, methods=["post"], url_path=r"recruitment/(?P<opening_id>\d+)/apply")
     def apply_recruitment(self, request, pk=None, opening_id=None):
         opening = RecruitmentOpening.objects.get(pk=opening_id, project_id=pk)
         serializer = RecruitmentApplicationSerializer(data=request.data)

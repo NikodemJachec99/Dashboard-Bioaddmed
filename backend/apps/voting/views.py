@@ -16,6 +16,12 @@ class PollViewSet(viewsets.ModelViewSet):
     filterset_fields = ["poll_type", "audience_type", "status", "visibility_type", "related_project"]
     search_fields = ["title", "description"]
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if getattr(self.request.user, "global_role", None) == "admin":
+            return queryset
+        return (queryset.filter(eligible_users=self.request.user) | queryset.filter(eligible_users__isnull=True)).distinct()
+
     def get_permissions(self):
         if self.action in {"create", "update", "partial_update", "destroy", "close", "create_option"}:
             return [IsAdminUserExtended()]

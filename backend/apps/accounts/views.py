@@ -4,6 +4,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.db.models import QuerySet
 from rest_framework import status, viewsets
+from rest_framework import serializers
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -60,6 +61,8 @@ def _clear_auth_cookies(response: Response) -> Response:
 
 
 class AuthViewSet(viewsets.ViewSet):
+    serializer_class = serializers.Serializer
+
     def get_permissions(self):
         if self.action in {"login", "refresh", "password_reset", "password_reset_confirm"}:
             return [AllowAny()]
@@ -177,7 +180,7 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer.save(user=user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=["patch", "delete"], url_path=r"skills/(?P<skill_id>[^/.]+)")
+    @action(detail=True, methods=["patch", "delete"], url_path=r"skills/(?P<skill_id>\d+)")
     def skill_detail(self, request, pk=None, skill_id=None):
         skill = UserSkill.objects.get(pk=skill_id, user_id=pk)
         if request.method == "PATCH":

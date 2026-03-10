@@ -19,7 +19,7 @@ class ProjectMembershipSerializer(serializers.ModelSerializer):
         model = ProjectMembership
         fields = ["id", "user", "user_email", "user_name", "project_role", "joined_at", "is_active"]
 
-    def get_user_name(self, obj):
+    def get_user_name(self, obj) -> str:
         return f"{obj.user.first_name} {obj.user.last_name}".strip()
 
 
