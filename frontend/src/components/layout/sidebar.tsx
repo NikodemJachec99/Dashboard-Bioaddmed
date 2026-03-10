@@ -13,6 +13,7 @@ import {
   Trophy,
   Users,
 } from "@/components/ui/icons";
+import { AppLogo } from "@/components/common/app-logo";
 import { cn } from "@/lib/cn";
 
 const baseItems = [
@@ -35,12 +36,8 @@ export function Sidebar() {
 
   return (
     <aside className="glass-panel hairline hidden w-[290px] shrink-0 flex-col p-4 lg:flex">
-      <div className="mb-8 flex items-center gap-3 px-2 pt-2">
-        <div className="flex size-12 items-center justify-center rounded-[18px] bg-accent text-lg font-bold text-white">B</div>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-accent">BioAddMed</p>
-          <h1 className="text-lg font-bold">Hub</h1>
-        </div>
+      <div className="mb-8 px-2 pt-2">
+        <AppLogo compact />
       </div>
       <nav className="flex flex-1 flex-col gap-1">
         {items.map((item) => {
