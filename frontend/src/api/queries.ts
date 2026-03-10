@@ -310,6 +310,10 @@ export async function fetchProjectMilestones(projectId: number): Promise<Project
   return api<ProjectMilestone[]>(`/projects/${projectId}/milestones/`);
 }
 
+export async function fetchProjectMembers(projectId: number): Promise<ProjectMembership[]> {
+  return api<ProjectMembership[]>(`/projects/${projectId}/members/`);
+}
+
 export async function fetchProjectRisks(projectId: number): Promise<ProjectRisk[]> {
   return api<ProjectRisk[]>(`/projects/${projectId}/risks/`);
 }
@@ -344,6 +348,13 @@ export async function createProject(payload: CreateProjectPayload) {
   });
 }
 
+export async function updateProject(projectId: number, payload: Partial<CreateProjectPayload>) {
+  return api<Project>(`/projects/${projectId}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function deleteUser(userId: number) {
   return api<void>(`/users/${userId}/`, { method: "DELETE" });
 }
@@ -353,6 +364,17 @@ export async function addProjectMember(projectId: number, payload: AddProjectMem
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export async function updateProjectMember(projectId: number, membershipId: number, payload: Partial<AddProjectMemberPayload>) {
+  return api<ProjectMembership>(`/projects/${projectId}/members/${membershipId}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteProjectMember(projectId: number, membershipId: number) {
+  return api<void>(`/projects/${projectId}/members/${membershipId}/`, { method: "DELETE" });
 }
 
 export async function createProjectLink(projectId: number, payload: { label: string; url: string; type?: string }) {
