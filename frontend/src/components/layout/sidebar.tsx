@@ -57,10 +57,6 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <div className="rounded-[24px] bg-accentSoft p-4 text-sm text-muted dark:bg-white/5">
-        <p className="font-semibold text-foreground">Produkcja</p>
-        <p className="mt-1">Host: `bioaddmed.bieda.it`</p>
-      </div>
     </aside>
   );
 }

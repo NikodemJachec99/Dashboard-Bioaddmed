@@ -2,12 +2,21 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { fetchProjects, queryKeys } from "@/api/queries";
+import { useAuth } from "@/app/providers/auth-provider";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
+function getStatusTone(status: string) {
+  if (status === "at_risk") return "warning";
+  if (status === "blocked") return "danger";
+  if (status === "completed") return "success";
+  return "default";
+}
+
 export function ProjectsPage() {
+  const { user } = useAuth();
   const { data: projects = [] } = useQuery({ queryKey: queryKeys.projects, queryFn: fetchProjects });
 
   return (
@@ -16,7 +25,13 @@ export function ProjectsPage() {
         eyebrow="Portfolio"
         title="Projekty"
         description="Centralny rejestr aktywnych inicjatyw badawczych, organizacyjnych i inżynierskich."
-        actions={<Button>Nowy projekt</Button>}
+        actions={
+          user?.global_role === "admin" ? (
+            <Link to="/admin">
+              <Button>Nowy projekt</Button>
+            </Link>
+          ) : null
+        }
       />
       <SectionCard title="Lista projektów" description="Karty z kluczowymi sygnałami statusu, etapu i obciążenia.">
         <div className="grid gap-4 xl:grid-cols-2">
@@ -27,11 +42,14 @@ export function ProjectsPage() {
                   <h3 className="text-xl font-semibold">{project.name}</h3>
                   <p className="mt-2 text-sm text-muted">{project.short_description}</p>
                 </div>
-                <Badge tone={project.status === "at_risk" ? "warning" : "default"}>{project.status}</Badge>
+                <Badge tone={getStatusTone(project.status)}>{project.status}</Badge>
               </div>
               <div className="mt-5 flex items-center justify-between text-sm text-muted">
                 <span>{project.category}</span>
-                <span>{project.progress_percent}%</span>
+                <span>{project.stage}</span>
+              </div>
+              <div className="mt-3 h-2 rounded-full bg-slate-200/70 dark:bg-slate-700/60">
+                <div className="h-2 rounded-full bg-accent transition-all" style={{ width: `${project.progress_percent}%` }} />
               </div>
             </Link>
           ))}
@@ -40,4 +58,3 @@ export function ProjectsPage() {
     </>
   );
 }
-

@@ -58,11 +58,9 @@ class ProjectViewSet(viewsets.ModelViewSet):
         )
 
     def get_queryset(self):
-        queryset = super().get_queryset()
-        user = self.request.user
-        if getattr(user, "global_role", None) == "admin":
-            return queryset
-        return queryset.filter(Q(memberships__user=user, memberships__is_active=True) | Q(created_by=user)).distinct()
+        # Każdy zalogowany użytkownik widzi statusy i listę wszystkich projektów.
+        # Uprawnienia do zmian pozostają kontrolowane akcjami i helperem _ensure_manage_access.
+        return super().get_queryset()
 
     def create(self, request, *args, **kwargs):
         if getattr(request.user, "global_role", None) != "admin":

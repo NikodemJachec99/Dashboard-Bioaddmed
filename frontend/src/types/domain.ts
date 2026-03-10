@@ -6,9 +6,17 @@ export type User = {
   global_role: "admin" | "member";
   avatar?: string;
   bio?: string;
+  year_of_study?: string;
   field_of_study?: string;
   specialization?: string;
+  interests?: string[];
+  technologies?: string[];
+  experience?: string;
   weekly_availability_hours?: number;
+  joined_at?: string;
+  is_active_member?: boolean;
+  achievements_summary?: string;
+  is_active?: boolean;
 };
 
 export type UserSkill = {
@@ -24,6 +32,8 @@ export type ProjectMembership = {
   user_email: string;
   user_name: string;
   project_role: "coordinator" | "member";
+  joined_at?: string;
+  is_active?: boolean;
 };
 
 export type Task = {
@@ -52,9 +62,13 @@ export type Project = {
   short_description: string;
   full_description?: string;
   category: string;
+  project_type?: string;
   stage: string;
   status: string;
   progress_percent: number;
+  start_date?: string;
+  planned_end_date?: string;
+  actual_end_date?: string;
   memberships: ProjectMembership[];
   tasks?: Task[];
 };
@@ -153,4 +167,3 @@ export type ReportSnapshot = {
   file_path: string;
   created_at: string;
 };
-

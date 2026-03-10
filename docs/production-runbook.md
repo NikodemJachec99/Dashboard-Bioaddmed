@@ -64,8 +64,8 @@ chmod +x deploy/scripts/postgres.sh
 ```sh
 curl -I http://127.0.0.1:${NGINX_HOST_PORT:-8080}/health/
 curl -I http://127.0.0.1:${NGINX_HOST_PORT:-8080}/api/health/
-docker compose -f deploy/docker-compose.prod.yml exec -T backend python scripts/smoke_check.py
-docker compose -f deploy/docker-compose.prod.yml ps
+docker compose --env-file .env -f deploy/docker-compose.prod.yml exec -T backend python scripts/smoke_check.py
+docker compose --env-file .env -f deploy/docker-compose.prod.yml ps
 ```
 
 ## GitHub Actions secrets

@@ -1,9 +1,22 @@
 import { ApiError, api } from "@/api/client";
 import { announcements, currentUser, knowledgeArticles, meetings, notifications, polls, projects, reports, resources } from "@/lib/mock-data";
-import type { Announcement, KnowledgeArticle, Meeting, Notification, Project, ReportSnapshot, Resource, User, VotePoll } from "@/types/domain";
+import type {
+  Achievement,
+  Announcement,
+  KnowledgeArticle,
+  Meeting,
+  Notification,
+  Project,
+  ProjectMembership,
+  ReportSnapshot,
+  Resource,
+  User,
+  VotePoll,
+} from "@/types/domain";
 
 export const queryKeys = {
   me: ["me"] as const,
+  users: ["users"] as const,
   projects: ["projects"] as const,
   meetings: ["meetings"] as const,
   polls: ["polls"] as const,
@@ -21,6 +34,34 @@ type Paginated<T> = {
 type LoginPayload = {
   email: string;
   password: string;
+};
+
+export type CreateUserPayload = {
+  email: string;
+  first_name: string;
+  last_name: string;
+  password: string;
+  global_role: User["global_role"];
+  is_active?: boolean;
+  is_active_member?: boolean;
+};
+
+export type CreateProjectPayload = {
+  name: string;
+  slug: string;
+  short_description: string;
+  full_description?: string;
+  category: string;
+  project_type?: string;
+  stage?: string;
+  status?: string;
+  progress_percent?: number;
+};
+
+export type AddProjectMemberPayload = {
+  user: number;
+  project_role: ProjectMembership["project_role"];
+  is_active?: boolean;
 };
 
 const demoMode = import.meta.env.VITE_ENABLE_DEMO_DATA === "true";
@@ -53,6 +94,10 @@ export async function fetchMe(): Promise<User | null> {
 
 export async function fetchProjects(): Promise<Project[]> {
   return withDemoFallback(async () => unwrapList(await api<Project[] | Paginated<Project>>("/projects/")), projects);
+}
+
+export async function fetchUsers(): Promise<User[]> {
+  return withDemoFallback(async () => unwrapList(await api<User[] | Paginated<User>>("/users/")), [currentUser]);
 }
 
 export async function fetchMeetings(): Promise<Meeting[]> {
@@ -90,6 +135,31 @@ export async function fetchNotifications(): Promise<Notification[]> {
     async () => unwrapList(await api<Notification[] | Paginated<Notification>>("/notifications/")),
     notifications,
   );
+}
+
+export async function fetchUserPortfolio(userId: number): Promise<Achievement[]> {
+  return withDemoFallback(async () => api<Achievement[]>(`/users/${userId}/portfolio/`), []);
+}
+
+export async function createUser(payload: CreateUserPayload) {
+  return api<User>("/users/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function createProject(payload: CreateProjectPayload) {
+  return api<Project>("/projects/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function addProjectMember(projectId: number, payload: AddProjectMemberPayload) {
+  return api<ProjectMembership>(`/projects/${projectId}/members/`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function loginUser(payload: LoginPayload): Promise<User> {

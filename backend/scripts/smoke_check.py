@@ -1,21 +1,29 @@
-import http.cookiejar
 import json
 import os
 import sys
+from urllib.error import HTTPError
 import urllib.request
 
 
-def request_json(opener, url, method="GET", payload=None):
+def request_json(opener, url, method="GET", payload=None, headers=None):
     body = None
-    headers = {}
+    request_headers = headers.copy() if headers else {}
     if payload is not None:
         body = json.dumps(payload).encode()
-        headers["Content-Type"] = "application/json"
+        request_headers["Content-Type"] = "application/json"
 
-    request = urllib.request.Request(url, data=body, headers=headers, method=method)
-    with opener.open(request) as response:
-        content = response.read().decode() or "{}"
-        return response.status, json.loads(content)
+    request = urllib.request.Request(url, data=body, headers=request_headers, method=method)
+    try:
+        with opener.open(request) as response:
+            content = response.read().decode() or "{}"
+            return response.status, json.loads(content), response.headers
+    except HTTPError as error:
+        content = error.read().decode() or "{}"
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError:
+            payload = {"detail": content}
+        return error.code, payload, error.headers
 
 
 def main():
@@ -27,19 +35,25 @@ def main():
     login_url = f"{base_url}/api/auth/login/"
     me_url = f"{base_url}/api/auth/me/"
 
-    jar = http.cookiejar.CookieJar()
-    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+    opener = urllib.request.build_opener()
 
-    health_status, health_payload = request_json(opener, health_url)
-    login_status, login_payload = request_json(
+    health_status, health_payload, _ = request_json(opener, health_url)
+    login_status, login_payload, login_headers = request_json(
         opener,
         login_url,
         method="POST",
         payload={"email": email, "password": password},
     )
-    me_status, me_payload = request_json(opener, me_url)
+    cookie_pairs = []
+    for set_cookie in login_headers.get_all("Set-Cookie", []):
+        cookie_pair = set_cookie.split(";", 1)[0].strip()
+        if cookie_pair:
+            cookie_pairs.append(cookie_pair)
 
-    cookie_names = sorted(cookie.name for cookie in jar)
+    me_headers = {"Cookie": "; ".join(cookie_pairs)} if cookie_pairs else None
+    me_status, me_payload, _ = request_json(opener, me_url, headers=me_headers)
+
+    cookie_names = sorted(cookie.split("=", 1)[0] for cookie in cookie_pairs if "=" in cookie)
     print(json.dumps(
         {
             "health_status": health_status,
